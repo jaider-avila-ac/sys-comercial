@@ -204,6 +204,10 @@ class FacturaController extends Controller
     // =========================================================================
     // EMITIR  POST /api/facturas/{id}/emitir
     // =========================================================================
+    // =========================================================================
+    // EMITIR  POST /api/facturas/{id}/emitir
+    // Valida stock suficiente ANTES de emitir.
+    // =========================================================================
     public function emitir(Request $request, $id)
     {
         $fac = $this->getFacAutorizada($request, $id);
@@ -211,6 +215,46 @@ class FacturaController extends Controller
 
         if ($fac->estado !== 'BORRADOR')
             return response()->json(['message' => 'Solo se puede emitir desde BORRADOR'], 422);
+
+        // ── Validar stock suficiente para cada línea ──
+        $lineas = FacturaLinea::where('factura_id', $fac->id)
+            ->whereNotNull('item_id')
+            ->get();
+
+        $erroresStock = [];
+
+        foreach ($lineas as $linea) {
+            $item = Item::where('empresa_id', $fac->empresa_id)
+                ->where('id', $linea->item_id)
+                ->where('controla_inventario', 1)
+                ->first();
+
+            if (!$item) continue;
+
+            $inv = Inventario::where('empresa_id', $fac->empresa_id)
+                ->where('item_id', $item->id)
+                ->first();
+
+            $disponible = $inv ? (float)$inv->cantidad_actual : 0;
+            $solicitado = (int)$linea->cantidad;
+
+            if ($solicitado > $disponible) {
+                $erroresStock[] = [
+                    'item_id'    => $item->id,
+                    'nombre'     => $item->nombre,
+                    'disponible' => $disponible,
+                    'solicitado' => $solicitado,
+                    'faltante'   => $solicitado - $disponible,
+                ];
+            }
+        }
+
+        if (!empty($erroresStock)) {
+            return response()->json([
+                'message' => 'Stock insuficiente para uno o más productos',
+                'items'   => $erroresStock,
+            ], 422);
+        }
 
         return DB::transaction(function () use ($u, $fac) {
             $fac->estado = 'EMITIDA';

@@ -27,41 +27,48 @@ class InventarioController extends Controller
         return $this->requireEmpresaId($u);
     }
 
-    /**
-     * GET /api/inventario
-     * Lista catálogo + stock (solo items que controlan inventario por defecto)
-     */
     public function index(Request $request)
     {
         $empresaId = $this->resolveEmpresaId($request);
 
         $q = trim((string)$request->query('search', ''));
-        $soloControla = $request->query('solo_controla', '1'); // 1 por defecto
-        $tipo = trim((string)$request->query('tipo', '')); // PRODUCTO/INSUMO etc
+        $soloControla = $request->query('solo_controla', '1');
+        $tipo = trim((string)$request->query('tipo', ''));
 
-        // LEFT JOIN para que si existe item controla_inventario=1 y aún no hay inventario,
-        // igual salga en lista con 0
+        $subVendidos = InventarioMovimiento::query()
+            ->select([
+                'item_id',
+                DB::raw('COALESCE(SUM(cantidad), 0) as vendido_total'),
+            ])
+            ->where('empresa_id', $empresaId)
+            ->where('tipo', 'SALIDA')
+            ->where('referencia_tipo', 'FACTURA')
+            ->groupBy('item_id');
+
         $rows = Item::query()
             ->select([
                 'items.id',
                 'items.tipo',
                 'items.nombre',
-                'items.unidad',
                 'items.controla_inventario',
                 'items.is_activo',
                 DB::raw('COALESCE(inventarios.cantidad_actual, 0) as cantidad_actual'),
                 DB::raw('COALESCE(inventarios.stock_minimo, 0) as stock_minimo'),
+                DB::raw('COALESCE(vendidos.vendido_total, 0) as vendido_total'),
             ])
-            ->leftJoin('inventarios', function($join) use ($empresaId) {
+            ->leftJoin('inventarios', function ($join) use ($empresaId) {
                 $join->on('inventarios.item_id', '=', 'items.id')
-                     ->where('inventarios.empresa_id', '=', $empresaId);
+                    ->where('inventarios.empresa_id', '=', $empresaId);
+            })
+            ->leftJoinSub($subVendidos, 'vendidos', function ($join) {
+                $join->on('vendidos.item_id', '=', 'items.id');
             })
             ->where('items.empresa_id', $empresaId)
             ->where('items.is_activo', 1)
             ->when($soloControla !== '0', fn($qq) => $qq->where('items.controla_inventario', 1))
             ->when($tipo !== '', fn($qq) => $qq->where('items.tipo', $tipo))
-            ->when($q !== '', function($qq) use ($q) {
-                $qq->where(function($w) use ($q) {
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
                     $w->where('items.nombre', 'like', "%{$q}%")
                       ->orWhere('items.descripcion', 'like', "%{$q}%");
                 });
@@ -72,19 +79,9 @@ class InventarioController extends Controller
         return response()->json($rows);
     }
 
-    /**
-     * POST /api/inventario/ajustar
-     * Hace movimiento + actualiza inventarios con transacción + lock
-     *
-     * tipo:
-     *  - ENTRADA: suma cantidad
-     *  - SALIDA: resta cantidad (no deja negativo)
-     *  - AJUSTE: la cantidad enviada es "nuevo stock" (conteo físico)
-     */
     public function ajustar(Request $request)
     {
         $u = $this->user($request);
-        // Ajustar inventario: SUPER_ADMIN / EMPRESA_ADMIN / OPERATIVO (si quieres limitar, quita OPERATIVO)
         $this->requireAnyRole($u, ['SUPER_ADMIN', 'EMPRESA_ADMIN', 'OPERATIVO']);
 
         $empresaId = $this->resolveEmpresaId($request);
@@ -95,12 +92,10 @@ class InventarioController extends Controller
             'cantidad' => ['required', 'numeric', 'min:0.001'],
             'motivo' => ['nullable', 'string', 'max:120'],
             'stock_minimo' => ['nullable', 'numeric', 'min:0'],
-
             'referencia_tipo' => ['nullable', 'in:FACTURA,AJUSTE,COMPRA,OTRO'],
             'referencia_id' => ['nullable', 'integer'],
         ]);
 
-        // Validar que el item exista y sea de la empresa y controle inventario
         $item = Item::query()
             ->where('empresa_id', $empresaId)
             ->where('id', $data['item_id'])
@@ -114,8 +109,6 @@ class InventarioController extends Controller
         $cantidad = (float)$data['cantidad'];
 
         return DB::transaction(function () use ($empresaId, $u, $item, $data, $cantidad) {
-
-            // Lock de inventario para evitar carreras
             $inv = Inventario::query()
                 ->where('empresa_id', $empresaId)
                 ->where('item_id', $item->id)
@@ -142,12 +135,10 @@ class InventarioController extends Controller
                 if ($nuevo < 0) {
                     abort(422, 'Stock insuficiente para salida');
                 }
-            } else { // AJUSTE
-                // cantidad = nuevo stock (conteo físico)
+            } else {
                 $nuevo = $cantidad;
             }
 
-            // actualiza inventario
             $inv->cantidad_actual = $nuevo;
 
             if (isset($data['stock_minimo'])) {
@@ -157,7 +148,6 @@ class InventarioController extends Controller
             $inv->updated_at = now();
             $inv->save();
 
-            // registra movimiento
             InventarioMovimiento::create([
                 'empresa_id' => $empresaId,
                 'item_id' => $item->id,
@@ -166,7 +156,7 @@ class InventarioController extends Controller
                 'motivo' => $data['motivo'] ?? null,
                 'referencia_tipo' => $data['referencia_tipo'] ?? 'AJUSTE',
                 'referencia_id' => $data['referencia_id'] ?? null,
-                'cantidad' => $cantidad, // en AJUSTE: se guarda el "nuevo stock"
+                'cantidad' => $cantidad,
                 'saldo_resultante' => $nuevo,
                 'ocurrido_en' => now(),
             ]);
@@ -180,30 +170,39 @@ class InventarioController extends Controller
         });
     }
 
-    /**
-     * GET /api/inventario/movimientos
-     * filtros: item_id, desde (YYYY-MM-DD), hasta (YYYY-MM-DD)
-     */
     public function movimientos(Request $request)
 {
     $empresaId = $this->resolveEmpresaId($request);
 
-    $itemId = (int) $request->query('item_id', 0);
-    $desde  = $request->query('desde');
-    $hasta  = $request->query('hasta');
+    $itemId = (int)$request->query('item_id', 0);
+    $desde = $request->query('desde');
+    $hasta = $request->query('hasta');
 
     $q = InventarioMovimiento::query()
         ->leftJoin('usuarios as u', 'u.id', '=', 'inventario_movimientos.usuario_id')
+        ->leftJoin('items as i', 'i.id', '=', 'inventario_movimientos.item_id')
+        ->leftJoin('facturas as f', function ($join) {
+            $join->on('f.id', '=', 'inventario_movimientos.referencia_id')
+                ->where('inventario_movimientos.referencia_tipo', '=', 'FACTURA');
+        })
+        ->leftJoin('compras as c', function ($join) {
+            $join->on('c.id', '=', 'inventario_movimientos.referencia_id')
+                ->where('inventario_movimientos.referencia_tipo', '=', 'COMPRA');
+        })
         ->select([
             'inventario_movimientos.*',
-            'u.nombres   as usuario_nombres',
+            'u.nombres as usuario_nombres',
             'u.apellidos as usuario_apellidos',
-            'u.email     as usuario_email',
+            'u.email as usuario_email',
+            'i.nombre as item_nombre',
+            'f.numero as factura_numero',
+            'c.numero as compra_numero',
         ])
         ->where('inventario_movimientos.empresa_id', $empresaId)
         ->when($itemId > 0, fn($qq) => $qq->where('inventario_movimientos.item_id', $itemId))
-        ->when($desde,      fn($qq) => $qq->whereDate('inventario_movimientos.ocurrido_en', '>=', $desde))
-        ->when($hasta,      fn($qq) => $qq->whereDate('inventario_movimientos.ocurrido_en', '<=', $hasta))
+        ->when($desde, fn($qq) => $qq->whereDate('inventario_movimientos.ocurrido_en', '>=', $desde))
+        ->when($hasta, fn($qq) => $qq->whereDate('inventario_movimientos.ocurrido_en', '<=', $hasta))
+        ->orderByDesc('inventario_movimientos.ocurrido_en')
         ->orderByDesc('inventario_movimientos.id')
         ->paginate(20);
 

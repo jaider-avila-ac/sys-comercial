@@ -1,53 +1,33 @@
 <?php
 
 namespace App\Http\Controllers\Api;
-use App\Http\Controllers\Controller;
 
+use App\Http\Controllers\Controller;
 use App\Models\IngresoManual;
 use App\Models\Pago;
 use App\Models\Egreso;
 use App\Models\Auditoria;
+use App\Services\IndicadoresComercialesService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class IngresoController extends Controller
 {
-    // ── GET /api/ingresos/resumen ─────────────────────────────
+    public function __construct(
+        private IndicadoresComercialesService $indicadores
+    ) {}
+
     public function resumen(Request $request): JsonResponse
     {
-        $empresaId = $request->user()->empresa_id;
-        $desde     = $request->input('desde');
-        $hasta     = $request->input('hasta');
+        $empresaId = (int)$request->user()->empresa_id;
+        $desde     = $request->input('desde') ?: now()->startOfMonth()->toDateString();
+        $hasta     = $request->input('hasta') ?: now()->toDateString();
 
-        $qPagos = Pago::where('empresa_id', $empresaId);
-        if ($desde) $qPagos->whereDate('fecha', '>=', $desde);
-        if ($hasta) $qPagos->whereDate('fecha', '<=', $hasta);
-        $totalPagos = (float) $qPagos->sum('total_pagado');
-
-        $qManuales = IngresoManual::where('empresa_id', $empresaId);
-        if ($desde) $qManuales->whereDate('fecha', '>=', $desde);
-        if ($hasta) $qManuales->whereDate('fecha', '<=', $hasta);
-        $totalManuales = (float) $qManuales->sum('monto');
-
-        $qEgresos = Egreso::where('empresa_id', $empresaId);
-        if ($desde) $qEgresos->whereDate('fecha', '>=', $desde);
-        if ($hasta) $qEgresos->whereDate('fecha', '<=', $hasta);
-        $totalEgresos = (float) $qEgresos->sum('monto');
-
-        $totalIngresos = $totalPagos + $totalManuales;
-        $balance       = $totalIngresos - $totalEgresos;
-
-        return response()->json([
-            'ingresos_pagos'    => $totalPagos,
-            'ingresos_manuales' => $totalManuales,
-            'total_ingresos'    => $totalIngresos,
-            'total_egresos'     => $totalEgresos,
-            'balance'           => $balance,
-        ]);
+        return response()->json(
+            $this->indicadores->resumenIngresos($empresaId, $desde, $hasta)
+        );
     }
 
-    // ── GET /api/ingresos/pagos ───────────────────────────────
-    // Lista todos los pagos para mostrarlos en el módulo finanzas
     public function pagos(Request $request): JsonResponse
     {
         $empresaId = $request->user()->empresa_id;
@@ -61,20 +41,19 @@ class IngresoController extends Controller
         if ($request->filled('hasta')) $q->whereDate('fecha', '<=', $request->input('hasta'));
 
         $list = $q->get()->map(fn($p) => [
-            'id'                  => $p->id,
-            'numero_recibo'       => $p->numero_recibo,
-            'fecha'               => $p->fecha?->toDateString(),
-            'cliente'             => $p->cliente?->nombre_razon_social ?? '—',
-            'forma_pago'          => $p->forma_pago,
-            'referencia'          => $p->referencia,
-            'notas'               => $p->notas,
-            'total_pagado'        => (float) $p->total_pagado,
+            'id'            => $p->id,
+            'numero_recibo' => $p->numero_recibo,
+            'fecha'         => $p->fecha?->toDateString(),
+            'cliente'       => $p->cliente?->nombre_razon_social ?? '—',
+            'forma_pago'    => $p->forma_pago,
+            'referencia'    => $p->referencia,
+            'notas'         => $p->notas,
+            'total_pagado'  => (float)$p->total_pagado,
         ]);
 
         return response()->json($list);
     }
 
-    // ── GET /api/ingresos/manuales ────────────────────────────
     public function index(Request $request): JsonResponse
     {
         $empresaId = $request->user()->empresa_id;
@@ -89,7 +68,6 @@ class IngresoController extends Controller
         return response()->json($q->get()->map(fn($i) => $this->format($i)));
     }
 
-    // ── POST /api/ingresos/manuales ───────────────────────────
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -124,7 +102,6 @@ class IngresoController extends Controller
         return response()->json($this->format($ingreso), 201);
     }
 
-    // ── PUT /api/ingresos/manuales/{id} ───────────────────────
     public function update(Request $request, int $id): JsonResponse
     {
         $user    = $request->user();
@@ -153,7 +130,6 @@ class IngresoController extends Controller
         return response()->json($this->format($ingreso));
     }
 
-    // ── DELETE /api/ingresos/manuales/{id} ────────────────────
     public function destroy(Request $request, int $id): JsonResponse
     {
         $user    = $request->user();
@@ -186,7 +162,7 @@ class IngresoController extends Controller
         return [
             'id'          => $i->id,
             'descripcion' => $i->descripcion,
-            'monto'       => (float) $i->monto,
+            'monto'       => (float)$i->monto,
             'fecha'       => $i->fecha?->toDateString(),
             'notas'       => $i->notas,
             'usuario_id'  => $i->usuario_id,

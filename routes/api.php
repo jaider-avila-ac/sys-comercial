@@ -16,6 +16,13 @@ use App\Http\Controllers\Api\AuditoriaController;
 use App\Http\Controllers\Api\IngresoController;
 use App\Http\Controllers\Api\EgresoController;
 use App\Http\Controllers\Api\BrevoConfigController;
+use App\Http\Controllers\Api\VentaRapidaController;
+
+use App\Http\Controllers\Api\ProveedorController;
+use App\Http\Controllers\Api\CompraController;
+
+use App\Http\Controllers\Api\StockController;
+
 
 
 
@@ -33,6 +40,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('brevo/test',   [BrevoConfigController::class, 'test']);
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
+
+    Route::post('/stock/verificar', [StockController::class, 'verificar']);
 
     // Empresa
     Route::get('/empresa/me',          [EmpresaController::class, 'me']);
@@ -123,6 +132,23 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('ingresos/manuales/{id}',     [IngresoController::class, 'destroy']);
 
 
+    // Proveedores
+    Route::get('/proveedores',         [ProveedorController::class, 'index']);
+    Route::post('/proveedores',        [ProveedorController::class, 'store']);
+    Route::get('/proveedores/{id}',    [ProveedorController::class, 'show']);
+    Route::put('/proveedores/{id}',    [ProveedorController::class, 'update']);
+    Route::delete('/proveedores/{id}', [ProveedorController::class, 'destroy']);
+
+    // Compras
+    Route::get('/compras',                        [CompraController::class, 'index']);
+    Route::post('/compras',                       [CompraController::class, 'store']);
+    Route::get('/compras/cuentas-por-pagar',      [CompraController::class, 'cuentasPorPagar']);
+    Route::get('/compras/{id}',                   [CompraController::class, 'show']);
+    Route::post('/compras/{id}/confirmar',        [CompraController::class, 'confirmar']);
+    Route::post('/compras/{id}/anular',           [CompraController::class, 'anular']);
+    Route::post('/compras/{id}/pagar',            [CompraController::class, 'pagar']);
+
+
     Route::get('/usuarios',                    [UsuarioController::class, 'index']);
     Route::post('/usuarios',                    [UsuarioController::class, 'store']);
     Route::get('/usuarios/activos-ahora',      [UsuarioController::class, 'activosAhora']); // ← antes de {id}
@@ -133,4 +159,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/usuarios/{id}/auditoria',     [UsuarioController::class, 'auditoria']);
     Route::get('/auditoria', [AuditoriaController::class, 'index']);
     Route::get('/usuarios/{id}/sesiones', [UsuarioController::class, 'sesiones']);
+
+    // Ventas rápidas
+Route::get('/ventas-rapidas',  [VentaRapidaController::class, 'index']);
+Route::post('/ventas-rapidas', [VentaRapidaController::class, 'store']);
 });

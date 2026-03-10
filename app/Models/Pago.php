@@ -11,8 +11,14 @@ class Pago extends Model
     protected $table = 'pagos';
 
     protected $fillable = [
-        'empresa_id', 'cliente_id', 'usuario_id',
-        'numero_recibo', 'fecha', 'forma_pago', 'referencia', 'notas',
+        'empresa_id',
+        'cliente_id',
+        'usuario_id',
+        'numero_recibo',
+        'fecha',
+        'forma_pago',
+        'referencia',
+        'notas',
         'total_pagado',
     ];
 

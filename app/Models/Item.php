@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Item extends Model
 {
@@ -11,6 +13,7 @@ class Item extends Model
 
     protected $fillable = [
         'empresa_id',
+        'proveedor_id',
         'tipo',
         'nombre',
         'descripcion',
@@ -31,5 +34,15 @@ class Item extends Model
     public function inventario(): HasOne
     {
         return $this->hasOne(Inventario::class, 'item_id');
+    }
+
+    public function proveedor(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Proveedor::class, 'proveedor_id');
+    }
+
+    public function movimientos(): HasMany
+    {
+        return $this->hasMany(InventarioMovimiento::class, 'item_id');
     }
 }
