@@ -555,4 +555,38 @@ class FacturaController extends Controller
             abort(403, 'No autorizado');
         return $fac;
     }
+
+
+    // =========================================================================
+// PAGOS DE UNA FACTURA  GET /api/facturas/{id}/pagos
+// Devuelve PagoAplicacion aplanado para el frontend:
+// { id, monto, pago_id, numero_recibo, fecha, forma_pago, referencia, notas }
+// =========================================================================
+public function pagos(Request $request, $id)
+{
+    $fac = $this->getFacAutorizada($request, $id);
+
+    $pagos = PagoAplicacion::query()
+        ->where('factura_id', $fac->id)
+        ->with('pago')
+        ->orderByDesc('id')
+        ->get()
+        ->map(function ($pa) {
+            return [
+                'id'            => $pa->id,
+                'monto'         => (float) $pa->monto,
+                'pago_id'       => $pa->pago_id,
+                'numero_recibo' => $pa->pago->numero_recibo ?? null,
+                'fecha'         => $pa->pago->fecha ?? null,
+                'forma_pago'    => $pa->pago->forma_pago ?? null,
+                'referencia'    => $pa->pago->referencia ?? null,
+                'notas'         => $pa->pago->notas ?? null,
+            ];
+        })
+        ->values();
+
+    return response()->json([
+        'pagos' => $pagos,
+    ]);
+}
 }

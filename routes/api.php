@@ -161,6 +161,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/usuarios/{id}/sesiones', [UsuarioController::class, 'sesiones']);
 
     // Ventas rápidas
-Route::get('/ventas-rapidas',  [VentaRapidaController::class, 'index']);
-Route::post('/ventas-rapidas', [VentaRapidaController::class, 'store']);
+    Route::get('/ventas-rapidas',  [VentaRapidaController::class, 'index']);
+    Route::post('/ventas-rapidas', [VentaRapidaController::class, 'store']);
 });

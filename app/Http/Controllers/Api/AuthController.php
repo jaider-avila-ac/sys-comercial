@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\SesionLog;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -22,7 +23,9 @@ class AuthController extends Controller
             'password'  => $data['password'],
             'is_activo' => 1,
         ])) {
-            return response()->json(['message' => 'Credenciales inválidas'], 401);
+            return response()->json([
+                'message' => 'Credenciales inválidas'
+            ], 401);
         }
 
         $request->session()->regenerate();
@@ -30,16 +33,24 @@ class AuthController extends Controller
         $user = Auth::user();
 
         // Actualizar último acceso
-        DB::table('usuarios')->where('id', $user->id)->update(['last_login_at' => now()]);
+        DB::table('usuarios')
+            ->where('id', $user->id)
+            ->update([
+                'last_login_at' => now(),
+            ]);
 
-        // Registrar sesión en historial
-        SesionLog::create([
-            'empresa_id'  => $user->empresa_id,
-            'usuario_id'  => $user->id,
-            'ip'          => $request->ip(),
-            'user_agent'  => mb_substr($request->userAgent() ?? '', 0, 300),
-            'iniciado_en' => now(),
-        ]);
+        // Registrar sesión sin romper login si algo falla
+        try {
+            SesionLog::create([
+                'empresa_id'  => $user->empresa_id, // puede ser null para SUPER_ADMIN
+                'usuario_id'  => $user->id,
+                'ip'          => $request->ip(),
+                'user_agent'  => mb_substr((string) ($request->userAgent() ?? ''), 0, 300),
+                'iniciado_en' => now(),
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return response()->json([
             'user' => [
