@@ -2,26 +2,67 @@
 
 namespace App\Models;
 
-use Illuminate\Foundation\Auth\User as Authenticatable;
+
+use Illuminate\Database\Eloquent\Model;
 use Laravel\Sanctum\HasApiTokens;
 
-class Usuario extends Authenticatable
+class Usuario extends Model
 {
     use HasApiTokens;
 
     protected $table = 'usuarios';
 
     protected $fillable = [
-        'empresa_id','nombres','apellidos','email','password_hash','rol','is_activo'
+        'empresa_id',
+        'nombres',
+        'apellidos',
+        'email',
+        'password_hash',
+        'rol',
+        'is_activo',
     ];
 
     protected $hidden = [
         'password_hash',
     ];
 
-    // Laravel espera "password", pero tú tienes "password_hash"
-    public function getAuthPassword()
+    protected $casts = [
+        'is_activo'     => 'boolean',
+        'last_login_at' => 'datetime',
+        'created_at'    => 'datetime',
+        'updated_at'    => 'datetime',
+    ];
+
+    // Laravel usa CREATED_AT / UPDATED_AT por defecto, pero la tabla los tiene como datetime
+    public $timestamps = true;
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = 'updated_at';
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    public function getNombreCompletoAttribute(): string
     {
-        return $this->password_hash;
+        return trim("{$this->nombres} {$this->apellidos}");
+    }
+
+    public function esSuperAdmin(): bool
+    {
+        return $this->rol === 'SUPER_ADMIN';
+    }
+
+    public function esActivo(): bool
+    {
+        return $this->is_activo === true;
+    }
+
+    // ------------------------------------------------------------------------
+    // Relaciones
+    // -------------------------------------------------------------------------
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
     }
 }

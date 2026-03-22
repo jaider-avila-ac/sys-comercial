@@ -8,6 +8,7 @@ use App\Models\Empresa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Models\Numeracion;
 
 class EmpresaController extends Controller
 {
@@ -31,9 +32,11 @@ class EmpresaController extends Controller
         $q = trim((string) $request->query('search', ''));
 
         $empresas = Empresa::query()
-            ->when($q !== '', fn($query) =>
+            ->when(
+                $q !== '',
+                fn($query) =>
                 $query->where('nombre', 'like', "%{$q}%")
-                      ->orWhere('nit', 'like', "%{$q}%")
+                    ->orWhere('nit', 'like', "%{$q}%")
             )
             ->orderByDesc('id')
             ->paginate(15);
@@ -41,6 +44,7 @@ class EmpresaController extends Controller
         return response()->json($empresas);
     }
 
+    /** POST /api/empresas — SUPER_ADMIN */
     /** POST /api/empresas — SUPER_ADMIN */
     public function store(Request $request)
     {
@@ -57,6 +61,28 @@ class EmpresaController extends Controller
         ]);
 
         $empresa = Empresa::create($data);
+
+        // ─── Sembrar numeraciones por defecto ────────────────────────────────
+        // Sin esto, la empresa no puede crear Facturas, Compras ni Cotizaciones.
+        $numeraciones = [
+            ['tipo' => 'FAC', 'prefijo' => 'FAC', 'consecutivo' => 0, 'relleno' => 4],
+            ['tipo' => 'COM', 'prefijo' => 'COM', 'consecutivo' => 0, 'relleno' => 4],
+            ['tipo' => 'COT', 'prefijo' => 'COT', 'consecutivo' => 0, 'relleno' => 4],
+            ['tipo' => 'REC', 'prefijo' => 'REC', 'consecutivo' => 0, 'relleno' => 4],
+        ];
+
+        foreach ($numeraciones as $n) {
+            Numeracion::create([
+                'empresa_id'  => $empresa->id,
+                'tipo'        => $n['tipo'],
+                'prefijo'     => $n['prefijo'],
+                'consecutivo' => $n['consecutivo'],
+                'relleno'     => $n['relleno'],
+                'updated_at'  => now(),
+            ]);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         return response()->json(['empresa' => $empresa], 201);
     }
 
