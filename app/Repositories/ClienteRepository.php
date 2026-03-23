@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Repositories;
+
+use App\Models\Cliente;
+use App\Repositories\Contracts\ClienteRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class ClienteRepository implements ClienteRepositoryInterface
+{
+    public function paginate(int $empresaId, string $search = '', int $perPage = 20): LengthAwarePaginator
+    {
+        return Cliente::where('empresa_id', $empresaId)
+            ->when($search, fn($q) => $q->where(fn($q) =>
+                $q->where('nombre_razon_social', 'like', "%{$search}%")
+                  ->orWhere('num_documento',     'like', "%{$search}%")
+                  ->orWhere('email',             'like', "%{$search}%")
+                  ->orWhere('telefono',          'like', "%{$search}%")
+            ))
+            ->orderBy('nombre_razon_social')
+            ->paginate($perPage);
+    }
+
+    public function findById(int $id): ?Cliente
+    {
+        return Cliente::find($id);
+    }
+
+    public function create(array $data): Cliente
+    {
+        return Cliente::create($data);
+    }
+
+    public function update(int $id, array $data): Cliente
+    {
+        $cliente = Cliente::findOrFail($id);
+        $cliente->update($data);
+        return $cliente->fresh();
+    }
+
+    public function toggleActivo(int $id): Cliente
+    {
+        $cliente = Cliente::findOrFail($id);
+        $cliente->update(['is_activo' => ! $cliente->is_activo]);
+        return $cliente->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        Cliente::findOrFail($id)->delete();
+    }
+}

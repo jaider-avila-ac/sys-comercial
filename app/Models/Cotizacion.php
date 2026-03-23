@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cotizacion extends Model
 {
@@ -26,34 +24,37 @@ class Cotizacion extends Model
     ];
 
     protected $casts = [
-        'fecha'             => 'date',
-        'fecha_vencimiento' => 'date',
-        'subtotal'          => 'decimal:2',
-        'total_descuentos'  => 'decimal:2',
-        'total_iva'         => 'decimal:2',
-        'total'             => 'decimal:2',
+        'fecha'            => 'date',
+        'fecha_vencimiento'=> 'date',
+        'subtotal'         => 'decimal:2',
+        'total_descuentos' => 'decimal:2',
+        'total_iva'        => 'decimal:2',
+        'total'            => 'decimal:2',
+        'created_at'       => 'datetime',
+        'updated_at'       => 'datetime',
     ];
 
-    // ── Relaciones ────────────────────────────────────────────────────────────
+    public $timestamps = true;
 
-    public function empresa(): BelongsTo
+    const ESTADOS = ['BORRADOR', 'EMITIDA', 'VENCIDA', 'FACTURADA', 'ANULADA'];
+
+    public function lineas()
     {
-        return $this->belongsTo(Empresa::class, 'empresa_id');
+        return $this->hasMany(CotizacionLinea::class, 'cotizacion_id');
     }
 
-    /** FIX: relación cliente para devolver nombre en JSON */
-    public function cliente(): BelongsTo
+    public function cliente()
     {
         return $this->belongsTo(Cliente::class, 'cliente_id');
     }
 
-    public function usuario(): BelongsTo
+    public function empresa()
     {
-        return $this->belongsTo(User::class, 'usuario_id');
+        return $this->belongsTo(Empresa::class, 'empresa_id');
     }
 
-    public function lineas(): HasMany
+    public function usuario()
     {
-        return $this->hasMany(CotizacionLinea::class, 'cotizacion_id');
+        return $this->belongsTo(Usuario::class, 'usuario_id');
     }
 }

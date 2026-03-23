@@ -3,112 +3,55 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\Concerns\ResolvesEmpresa;
-use App\Services\IndicadoresComercialesService;
-use App\Models\Cliente;
-use App\Models\Item;
-use App\Models\Cotizacion;
+use App\Models\EmpresaResumen;
 use App\Models\Factura;
-use App\Models\Pago;
+use App\Models\IngresoPago;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    use ResolvesEmpresa;
-
-    public function __construct(
-        private IndicadoresComercialesService $indicadores
-    ) {}
-
-    public function index(Request $request)
+    // GET /api/dashboard
+    // Para EMPRESA_ADMIN y OPERATIVO — lee su empresa
+    public function index(Request $request): JsonResponse
     {
-        $empresaId = $this->resolveEmpresaId($request);
-        $kpi       = $this->indicadores->resumenFacturasKpi($empresaId);
+        $empresaId = $request->empresa_id_ctx;
+        $resumen   = EmpresaResumen::find($empresaId);
 
-        // ── Contadores generales ──────────────────────────────
-        $totalClientes  = Cliente::where('empresa_id', $empresaId)->count();
-        $totalItems     = Item::where('empresa_id', $empresaId)->count();
-        $cotizActivas   = Cotizacion::where('empresa_id', $empresaId)
-                            ->whereIn('estado', ['BORRADOR', 'EMITIDA', 'VIGENTE'])
-                            ->count();
-        $factBorrador   = Factura::where('empresa_id', $empresaId)
-                            ->where('estado', 'BORRADOR')
-                            ->count();
+        if (! $resumen) {
+            return response()->json(['message' => 'Sin datos aún.'], 404);
+        }
 
-        // ── Últimas 8 facturas ────────────────────────────────
-        $ultimasFacturas = Factura::with('cliente:id,nombre_razon_social')
-            ->where('empresa_id', $empresaId)
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
-            ->limit(5)
-            ->get()
-            ->map(fn($f) => [
-                'id'      => $f->id,
-                'numero'  => $f->numero,
-                'estado'  => $f->estado,
-                'fecha'   => $f->fecha?->toDateString(),
-                'total'   => (float) $f->total,
-                'saldo'   => (float) $f->saldo,
-                'cliente' => $f->cliente
-                    ? ['nombre_razon_social' => $f->cliente->nombre_razon_social]
-                    : null,
-            ]);
-
-        // ── Facturas con saldo pendiente (máx. 10) ────────────
-        $facturasPendientes = Factura::with('cliente:id,nombre_razon_social')
-            ->where('empresa_id', $empresaId)
+        // Actividad reciente — estas sí se consultan en tiempo real
+        // pero son solo los últimos 5 registros, muy baratos
+        $ultimasFacturas = Factura::where('empresa_id', $empresaId)
             ->where('estado', 'EMITIDA')
-            ->where('saldo', '>', 0)
-            ->orderByDesc('saldo')
+            ->with('cliente')
+            ->orderByDesc('created_at')
             ->limit(5)
-            ->get()
-            ->map(fn($f) => [
-                'id'      => $f->id,
-                'numero'  => $f->numero,
-                'fecha'   => $f->fecha?->toDateString(),
-                'total'   => (float) $f->total,
-                'saldo'   => (float) $f->saldo,
-                'cliente' => $f->cliente
-                    ? ['nombre_razon_social' => $f->cliente->nombre_razon_social]
-                    : null,
-            ]);
+            ->get(['id', 'numero', 'cliente_id', 'total', 'saldo', 'fecha']);
 
-        // ── Últimos 8 pagos ───────────────────────────────────
-        $ultimosPagos = Pago::with('cliente:id,nombre_razon_social')
-            ->where('empresa_id', $empresaId)
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
+        $ultimosPagos = IngresoPago::where('empresa_id', $empresaId)
+            ->where('estado', 'ACTIVO')
+            ->orderByDesc('created_at')
             ->limit(5)
-            ->get()
-            ->map(fn($p) => [
-                'id'             => $p->id,
-                'numero_recibo'  => $p->numero_recibo,
-                'fecha'          => $p->fecha?->toDateString(),
-                'forma_pago'     => $p->forma_pago,
-                'total_pagado'   => (float) $p->total_pagado,
-                'total_aplicado' => (float) $p->total_pagado, // alias consistente
-                'cliente'        => $p->cliente
-                    ? ['nombre_razon_social' => $p->cliente->nombre_razon_social]
-                    : null,
-            ]);
+            ->get(['id', 'numero', 'monto', 'forma_pago', 'fecha']);
 
         return response()->json([
-            'kpi' => [
-                'total_clientes'       => $totalClientes,
-                'total_items'          => $totalItems,
-                'cotizaciones_activas' => $cotizActivas,
-                'facturas_borrador'    => $factBorrador,
-                'total_emitidas'       => $kpi['total_emitidas'],
-                'total_facturado'      => $kpi['total_facturado'],
-                'total_recaudado'      => $kpi['total_recaudado'],
-                'total_ventas_rapidas' => $kpi['total_ventas_rapidas'],
-                'saldo_pendiente'      => $kpi['saldo_pendiente'],
-                'facturas_con_saldo'   => $kpi['facturas_con_saldo'],
-                'facturas_pagadas'     => $kpi['facturas_pagadas'],
-            ],
-            'ultimas_facturas'    => $ultimasFacturas,
-            'facturas_pendientes' => $facturasPendientes,
-            'ultimos_pagos'       => $ultimosPagos,
+            'resumen'          => $resumen,
+            'ultimas_facturas' => $ultimasFacturas,
+            'ultimos_pagos'    => $ultimosPagos,
         ]);
+    }
+
+    // GET /api/dashboard/empresas
+    // Solo SUPER_ADMIN — resumen de todas las empresas
+    public function todasLasEmpresas(): JsonResponse
+    {
+        $resumenes = EmpresaResumen::with('empresa')
+            ->orderByDesc('ultima_actividad')
+            ->get();
+
+        return response()->json($resumenes);
     }
 }

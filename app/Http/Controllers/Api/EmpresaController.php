@@ -2,203 +2,84 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Api\Concerns\Autoriza;
 use App\Http\Controllers\Controller;
-use App\Models\Empresa;
+use App\Services\EmpresaService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use App\Models\Numeracion;
 
 class EmpresaController extends Controller
 {
-    use Autoriza;
+    public function __construct(
+        private readonly EmpresaService $empresaService,
+    ) {}
 
-    /** GET /api/empresa/me — EMPRESA_ADMIN */
-    public function me(Request $request)
+    // GET /api/empresas
+    public function index(): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireRole($u, 'EMPRESA_ADMIN');
-        $empresa = Empresa::findOrFail($this->requireEmpresaId($u));
-        return response()->json(['empresa' => $empresa]);
+        return response()->json($this->empresaService->listar());
     }
 
-    /** GET /api/empresas — SUPER_ADMIN */
-    public function index(Request $request)
+    // GET /api/empresa/me
+    public function me(Request $request): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireRole($u, 'SUPER_ADMIN');
-
-        $q = trim((string) $request->query('search', ''));
-
-        $empresas = Empresa::query()
-            ->when(
-                $q !== '',
-                fn($query) =>
-                $query->where('nombre', 'like', "%{$q}%")
-                    ->orWhere('nit', 'like', "%{$q}%")
-            )
-            ->orderByDesc('id')
-            ->paginate(15);
-
-        return response()->json($empresas);
+        return response()->json($this->empresaService->obtener($request->empresa_id_ctx));
     }
 
-    /** POST /api/empresas — SUPER_ADMIN */
-    /** POST /api/empresas — SUPER_ADMIN */
-    public function store(Request $request)
+    // GET /api/empresas/{id}
+    public function show(int $id): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireRole($u, 'SUPER_ADMIN');
+        return response()->json($this->empresaService->obtener($id));
+    }
 
+    // POST /api/empresas
+    public function store(Request $request): JsonResponse
+    {
         $data = $request->validate([
             'nombre'    => ['required', 'string', 'max:150'],
-            'nit'       => ['nullable', 'string', 'max:30', 'unique:empresas,nit'],
+            'nit'       => ['required', 'string', 'max:30'],
             'email'     => ['nullable', 'email', 'max:120'],
             'telefono'  => ['nullable', 'string', 'max:40'],
             'direccion' => ['nullable', 'string', 'max:180'],
-            'is_activa' => ['nullable', 'boolean'],
         ]);
 
-        $empresa = Empresa::create($data);
-
-        // ─── Sembrar numeraciones por defecto ────────────────────────────────
-        // Sin esto, la empresa no puede crear Facturas, Compras ni Cotizaciones.
-        $numeraciones = [
-            ['tipo' => 'FAC', 'prefijo' => 'FAC', 'consecutivo' => 0, 'relleno' => 4],
-            ['tipo' => 'COM', 'prefijo' => 'COM', 'consecutivo' => 0, 'relleno' => 4],
-            ['tipo' => 'COT', 'prefijo' => 'COT', 'consecutivo' => 0, 'relleno' => 4],
-            ['tipo' => 'REC', 'prefijo' => 'REC', 'consecutivo' => 0, 'relleno' => 4],
-        ];
-
-        foreach ($numeraciones as $n) {
-            Numeracion::create([
-                'empresa_id'  => $empresa->id,
-                'tipo'        => $n['tipo'],
-                'prefijo'     => $n['prefijo'],
-                'consecutivo' => $n['consecutivo'],
-                'relleno'     => $n['relleno'],
-                'updated_at'  => now(),
-            ]);
-        }
-        // ─────────────────────────────────────────────────────────────────────
-
-        return response()->json(['empresa' => $empresa], 201);
+        return response()->json($this->empresaService->crear($data), 201);
     }
 
-    /** GET /api/empresas/{id} */
-    public function show(Request $request, $id)
+    // PUT /api/empresas/{id}
+    public function update(Request $request, int $id): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireAnyRole($u, ['SUPER_ADMIN', 'EMPRESA_ADMIN']);
-        $empresa = Empresa::findOrFail($id);
-        $this->ensureSameEmpresa($u, (int) $empresa->id);
-        return response()->json(['empresa' => $empresa]);
-    }
-
-    /** PUT /api/empresas/{id} */
-    public function update(Request $request, $id)
-    {
-        $u = $this->user($request);
-        $this->requireAnyRole($u, ['SUPER_ADMIN', 'EMPRESA_ADMIN']);
-        $empresa = Empresa::findOrFail($id);
-        $this->ensureSameEmpresa($u, (int) $empresa->id);
-
         $data = $request->validate([
-            'nombre'    => ['sometimes', 'required', 'string', 'max:150'],
-            'nit'       => ['nullable', 'string', 'max:30', "unique:empresas,nit,{$empresa->id}"],
-            'email'     => ['nullable', 'email', 'max:120'],
-            'telefono'  => ['nullable', 'string', 'max:40'],
-            'direccion' => ['nullable', 'string', 'max:180'],
-            'is_activa' => ['nullable', 'boolean'],
+            'nombre'    => ['sometimes', 'string', 'max:150'],
+            'nit'       => ['sometimes', 'string', 'max:30'],
+            'email'     => ['sometimes', 'nullable', 'email', 'max:120'],
+            'telefono'  => ['sometimes', 'nullable', 'string', 'max:40'],
+            'direccion' => ['sometimes', 'nullable', 'string', 'max:180'],
+            'is_activa' => ['sometimes', 'boolean'],
         ]);
 
-        // EMPRESA_ADMIN no puede cambiar is_activa
-        if ($u->rol === 'EMPRESA_ADMIN') {
-            unset($data['is_activa']);
-        }
-
-        $empresa->fill($data)->save();
-        return response()->json(['empresa' => $empresa]);
+        return response()->json($this->empresaService->actualizar($id, $data));
     }
 
-    /** DELETE /api/empresas/{id} — SUPER_ADMIN */
-    public function destroy(Request $request, $id)
+    // DELETE /api/empresas/{id}
+    public function destroy(int $id): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireRole($u, 'SUPER_ADMIN');
-        $empresa = Empresa::findOrFail($id);
-
-        // Eliminar logo si existe
-        if ($empresa->logo_path) {
-            Storage::disk('public')->delete($empresa->logo_path);
-        }
-
-        $empresa->delete();
-        return response()->json(['ok' => true]);
+        $this->empresaService->eliminar($id);
+        return response()->json(['message' => 'Empresa eliminada correctamente.']);
     }
 
-    // =========================================================================
-    // LOGO
-    // =========================================================================
-
-    /**
-     * POST /api/empresas/{id}/logo
-     * Sube o reemplaza el logo de la empresa.
-     * Campo: logo (file, png/jpg/webp, max 2 MB)
-     */
-    public function uploadLogo(Request $request, $id)
+    // POST /api/empresas/{id}/logo
+    public function uploadLogo(Request $request, int $id): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireAnyRole($u, ['SUPER_ADMIN', 'EMPRESA_ADMIN']);
-        $empresa = Empresa::findOrFail($id);
-        $this->ensureSameEmpresa($u, (int) $empresa->id);
-
         $request->validate([
-            'logo' => ['required', 'file', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
-        // Borrar logo anterior
-        if ($empresa->logo_path) {
-            Storage::disk('public')->delete($empresa->logo_path);
-        }
-
-        $file = $request->file('logo');
-        $ext  = $file->getClientOriginalExtension();
-        $path = $file->storeAs(
-            "logos",
-            "empresa_{$empresa->id}_" . Str::random(8) . ".{$ext}",
-            'public'
-        );
-
-        $empresa->logo_path       = $path;
-        $empresa->logo_mime       = $file->getMimeType();
-        $empresa->logo_updated_at = now();
-        $empresa->save();
-
-        return response()->json(['empresa' => $empresa]);
+        return response()->json($this->empresaService->subirLogo($id, $request->file('logo')));
     }
 
-    /**
-     * DELETE /api/empresas/{id}/logo
-     * Elimina el logo de la empresa.
-     */
-    public function deleteLogo(Request $request, $id)
+    // DELETE /api/empresas/{id}/logo
+    public function deleteLogo(int $id): JsonResponse
     {
-        $u = $this->user($request);
-        $this->requireAnyRole($u, ['SUPER_ADMIN', 'EMPRESA_ADMIN']);
-        $empresa = Empresa::findOrFail($id);
-        $this->ensureSameEmpresa($u, (int) $empresa->id);
-
-        if ($empresa->logo_path) {
-            Storage::disk('public')->delete($empresa->logo_path);
-        }
-
-        $empresa->logo_path       = null;
-        $empresa->logo_mime       = null;
-        $empresa->logo_updated_at = null;
-        $empresa->save();
-
-        return response()->json(['empresa' => $empresa]);
+        return response()->json($this->empresaService->eliminarLogo($id));
     }
 }

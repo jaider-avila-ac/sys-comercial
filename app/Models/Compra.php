@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Compra extends Model
 {
@@ -40,28 +38,34 @@ class Compra extends Model
         'updated_at'        => 'datetime',
     ];
 
-    public function empresa(): BelongsTo
-    {
-        return $this->belongsTo(Empresa::class, 'empresa_id');
-    }
+    public $timestamps = true;
 
-    public function proveedor(): BelongsTo
-    {
-        return $this->belongsTo(Proveedor::class, 'proveedor_id');
-    }
+    // condicion_pago nullable = compra libre
+    const CONDICIONES = ['CONTADO', 'CREDITO'];
+    const ESTADOS     = ['PENDIENTE', 'PARCIAL', 'PAGADA', 'ANULADA'];
 
-    public function usuario(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'usuario_id');
-    }
-
-    public function items(): HasMany
+    public function items()
     {
         return $this->hasMany(CompraItem::class, 'compra_id');
     }
 
-    public function pagos(): HasMany
+    public function proveedor()
     {
-        return $this->hasMany(CompraPago::class, 'compra_id');
+        return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function usuario()
+    {
+        return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function egresos()
+    {
+        return $this->hasMany(EgresoCompra::class, 'compra_id');
     }
 }

@@ -3,12 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Auditoria extends Model
 {
-    protected $table      = 'auditoria';
-    public    $timestamps = false; // solo tiene ocurrido_en
+    protected $table = 'auditoria';
 
     protected $fillable = [
         'empresa_id',
@@ -25,13 +23,11 @@ class Auditoria extends Model
         'ocurrido_en' => 'datetime',
     ];
 
-    public function empresa(): BelongsTo
-    {
-        return $this->belongsTo(Empresa::class, 'empresa_id');
-    }
+    // Solo tiene ocurrido_en, no created_at/updated_at estándar
+    public $timestamps = false;
 
-    public function usuario(): BelongsTo
+    public function usuario()
     {
-        return $this->belongsTo(User::class, 'usuario_id');
+        return $this->belongsTo(Usuario::class, 'usuario_id');
     }
 }

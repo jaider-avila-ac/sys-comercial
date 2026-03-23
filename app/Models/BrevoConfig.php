@@ -21,9 +21,11 @@ class BrevoConfig extends Model
     protected $casts = [
         'is_activo'   => 'boolean',
         'template_id' => 'integer',
+        'created_at'  => 'datetime',
+        'updated_at'  => 'datetime',
     ];
 
-    // Nunca exponer el api_key en respuestas normales
+    // Nunca exponer api_key en respuestas normales
     protected $hidden = ['api_key'];
 
     public function empresa(): BelongsTo

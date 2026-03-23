@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Cliente extends Model
 {
@@ -30,7 +29,9 @@ class Cliente extends Model
         'updated_at'    => 'datetime',
     ];
 
-    public function empresa(): BelongsTo
+    public $timestamps = true;
+
+    public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
     }

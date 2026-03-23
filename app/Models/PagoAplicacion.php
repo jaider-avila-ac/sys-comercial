@@ -3,28 +3,30 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PagoAplicacion extends Model
 {
     protected $table = 'pago_aplicaciones';
 
-    public $timestamps = false;
-
     protected $fillable = [
-        'pago_id', 'factura_id', 'empresa_id', 'monto',
+        'ingreso_pago_id',
+        'factura_id',
+        'empresa_id',
+        'monto',
     ];
 
     protected $casts = [
         'monto' => 'decimal:2',
     ];
 
-    public function pago(): BelongsTo
+    public $timestamps = false;
+
+    public function ingresoPago()
     {
-        return $this->belongsTo(Pago::class, 'pago_id');
+        return $this->belongsTo(IngresoPago::class, 'ingreso_pago_id');
     }
 
-    public function factura(): BelongsTo
+    public function factura()
     {
         return $this->belongsTo(Factura::class, 'factura_id');
     }

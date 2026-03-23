@@ -3,87 +3,68 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auth\AuthService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use App\Models\SesionLog;
-use Throwable;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
-    public function login(Request $request)
+    public function __construct(
+        private readonly AuthService $authService,
+    ) {}
+
+    // POST /api/auth/iniciar
+    public function iniciar(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $preToken = $this->authService->iniciarSesion($data['email']);
+
+        return response()->json([
+            'message'   => 'Token generado. Revisa tu correo.',
+            'pre_token' => $preToken, // TODO: eliminar en producción
+        ]);
+    }
+
+    // POST /api/auth/verificar
+    public function verificar(Request $request): JsonResponse
     {
         $data = $request->validate([
             'email'    => ['required', 'email'],
+            'token'    => ['required', 'string', 'size:6'],
             'password' => ['required', 'string'],
         ]);
 
-        if (!Auth::attempt([
-            'email'     => $data['email'],
-            'password'  => $data['password'],
-            'is_activo' => 1,
-        ])) {
-            return response()->json([
-                'message' => 'Credenciales inválidas'
-            ], 401);
-        }
+        $result = $this->authService->verificarSesion(
+            email:    $data['email'],
+            preToken: $data['token'],
+            password: $data['password'],
+        );
 
-        $request->session()->regenerate();
-
-        $user = Auth::user();
-
-        // Actualizar último acceso
-        DB::table('usuarios')
-            ->where('id', $user->id)
-            ->update([
-                'last_login_at' => now(),
-            ]);
-
-        // Registrar sesión sin romper login si algo falla
-        try {
-            SesionLog::create([
-                'empresa_id'  => $user->empresa_id, // puede ser null para SUPER_ADMIN
-                'usuario_id'  => $user->id,
-                'ip'          => $request->ip(),
-                'user_agent'  => mb_substr((string) ($request->userAgent() ?? ''), 0, 300),
-                'iniciado_en' => now(),
-            ]);
-        } catch (Throwable $e) {
-            report($e);
-        }
-
-        return response()->json([
-            'user' => [
-                'id'         => $user->id,
-                'empresa_id' => $user->empresa_id,
-                'nombres'    => $user->nombres,
-                'apellidos'  => $user->apellidos,
-                'email'      => $user->email,
-                'rol'        => $user->rol,
-            ]
-        ]);
+        return response()->json($result);
     }
 
-    public function me(Request $request)
+    // POST /api/auth/logout
+    public function logout(Request $request): JsonResponse
     {
-        $u = $request->user();
-
-        return response()->json([
-            'id'         => $u->id,
-            'empresa_id' => $u->empresa_id,
-            'nombres'    => $u->nombres,
-            'apellidos'  => $u->apellidos,
-            'email'      => $u->email,
-            'rol'        => $u->rol,
-        ]);
+        $this->authService->cerrarSesion($request->user());
+        return response()->json(['message' => 'Sesión cerrada correctamente.']);
     }
 
-    public function logout(Request $request)
+    // GET /api/auth/me
+    public function me(Request $request): JsonResponse
     {
-        Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $usuario = $request->user();
 
-        return response()->json(['ok' => true]);
+        return response()->json([
+            'id'              => $usuario->id,
+            'nombre_completo' => $usuario->nombre_completo,
+            'email'           => $usuario->email,
+            'rol'             => $usuario->rol,
+            'empresa_id'      => $usuario->empresa_id,
+        ]);
     }
 }

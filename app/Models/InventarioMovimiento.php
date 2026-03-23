@@ -3,13 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InventarioMovimiento extends Model
 {
     protected $table = 'inventario_movimientos';
-
-    public $timestamps = false; // ocurrido_en
 
     protected $fillable = [
         'empresa_id',
@@ -19,25 +16,26 @@ class InventarioMovimiento extends Model
         'motivo',
         'referencia_tipo',
         'referencia_id',
-        'cantidad',
-        'saldo_resultante',
+        'unidades',
+        'unidades_resultantes',
         'ocurrido_en',
     ];
 
     protected $casts = [
-        'cantidad' => 'decimal:3',
-        'saldo_resultante' => 'decimal:3',
-        'referencia_id' => 'integer',
-        'ocurrido_en' => 'datetime',
+        'unidades'             => 'integer',
+        'unidades_resultantes' => 'integer',
+        'ocurrido_en'          => 'datetime',
     ];
 
-    public function item(): BelongsTo
+    public $timestamps = false;
+
+    public function item()
     {
         return $this->belongsTo(Item::class, 'item_id');
     }
 
-    public function usuario(): BelongsTo
+    public function usuario()
     {
-        return $this->belongsTo(User::class, 'usuario_id');
+        return $this->belongsTo(Usuario::class, 'usuario_id');
     }
 }

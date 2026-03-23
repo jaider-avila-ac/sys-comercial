@@ -3,12 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CompraItem extends Model
 {
-    protected $table    = 'compra_items';
-    public    $timestamps = false;
+    protected $table = 'compra_items';
 
     protected $fillable = [
         'compra_id',
@@ -19,18 +17,20 @@ class CompraItem extends Model
     ];
 
     protected $casts = [
-        'cantidad'        => 'decimal:3',
+        'cantidad'        => 'integer',
         'precio_unitario' => 'decimal:2',
         'subtotal'        => 'decimal:2',
     ];
 
-    public function compra(): BelongsTo
-    {
-        return $this->belongsTo(Compra::class, 'compra_id');
-    }
+    public $timestamps = false;
 
-    public function item(): BelongsTo
+    public function item()
     {
         return $this->belongsTo(Item::class, 'item_id');
+    }
+
+    public function compra()
+    {
+        return $this->belongsTo(Compra::class, 'compra_id');
     }
 }

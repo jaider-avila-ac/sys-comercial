@@ -3,12 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SesionLog extends Model
 {
-    protected $table      = 'sesiones_log';
-    public    $timestamps = false;
+    protected $table = 'sesiones_log';
 
     protected $fillable = [
         'empresa_id',
@@ -24,8 +22,10 @@ class SesionLog extends Model
         'iniciado_en' => 'datetime',
     ];
 
-    public function usuario(): BelongsTo
+    public $timestamps = false;
+
+    public function usuario()
     {
-        return $this->belongsTo(User::class, 'usuario_id');
+        return $this->belongsTo(Usuario::class, 'usuario_id');
     }
 }

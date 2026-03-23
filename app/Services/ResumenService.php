@@ -1,0 +1,127 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\EmpresaResumen;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * ResumenService
+ *
+ * Recalcula y persiste la fila de empresa_resumen para una empresa.
+ * Se llama desde los observers — nunca desde controladores directamente.
+ * Un solo método público: recalcular(int $empresaId).
+ *
+ * La tabla empresa_resumen actúa como caché contable:
+ * el dashboard y el SUPER_ADMIN leen de aquí sin tocar ninguna otra tabla.
+ */
+class ResumenService
+{
+    public function recalcular(int $empresaId): void
+    {
+        $data = $this->calcular($empresaId);
+
+        EmpresaResumen::updateOrInsert(
+            ['empresa_id' => $empresaId],
+            $data
+        );
+    }
+
+    // ── Privado ───────────────────────────────────────────────────────────────
+
+    private function calcular(int $empresaId): array
+    {
+        // ── Clientes e ítems activos ──────────────────────────────────────────
+        $totalClientes = DB::table('clientes')
+            ->where('empresa_id', $empresaId)
+            ->where('is_activo', true)
+            ->count();
+
+        $totalItems = DB::table('items')
+            ->where('empresa_id', $empresaId)
+            ->where('is_activo', true)
+            ->count();
+
+        // ── Cotizaciones ──────────────────────────────────────────────────────
+        $cotizacionesActivas = DB::table('cotizaciones')
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', ['BORRADOR', 'EMITIDA'])
+            ->count();
+
+        // ── Facturas ──────────────────────────────────────────────────────────
+        $facturasBorrador = DB::table('facturas')
+            ->where('empresa_id', $empresaId)
+            ->where('estado', 'BORRADOR')
+            ->count();
+
+        $facturasEmitidas = DB::table('facturas')
+            ->where('empresa_id', $empresaId)
+            ->where('estado', 'EMITIDA')
+            ->count();
+
+        $totalesFacturas = DB::table('facturas')
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', ['EMITIDA'])
+            ->selectRaw('
+                COALESCE(SUM(total), 0)        as total_facturado,
+                COALESCE(SUM(total_pagado), 0) as total_pagado,
+                COALESCE(SUM(saldo), 0)        as saldo_pendiente
+            ')
+            ->first();
+
+        // ── Ingresos en caja (solo ACTIVO) ────────────────────────────────────
+        $ingresosFacturas = DB::table('caja_movimientos')
+            ->where('empresa_id', $empresaId)
+            ->where('origen_tipo', 'INGRESO_PAGO')
+            ->sum('monto');
+
+        $ingresosMostrador = DB::table('caja_movimientos')
+            ->where('empresa_id', $empresaId)
+            ->where('origen_tipo', 'INGRESO_MOSTRADOR')
+            ->sum('monto');
+
+        $ingresosManuales = DB::table('caja_movimientos')
+            ->where('empresa_id', $empresaId)
+            ->where('origen_tipo', 'INGRESO_MANUAL')
+            ->sum('monto');
+
+        $totalEnCaja = $ingresosFacturas + $ingresosMostrador + $ingresosManuales;
+
+        // ── Egresos en caja ───────────────────────────────────────────────────
+        $egresosCompras = DB::table('caja_movimientos')
+            ->where('empresa_id', $empresaId)
+            ->where('origen_tipo', 'EGRESO_COMPRA')
+            ->sum('monto');
+
+        $egresosManuales = DB::table('caja_movimientos')
+            ->where('empresa_id', $empresaId)
+            ->where('origen_tipo', 'EGRESO_MANUAL')
+            ->sum('monto');
+
+        $totalEgresos = $egresosCompras + $egresosManuales;
+
+        // ── Balance real ──────────────────────────────────────────────────────
+        $balanceReal = $totalEnCaja - $totalEgresos;
+
+        return [
+            'empresa_id'           => $empresaId,
+            'total_clientes'       => $totalClientes,
+            'total_items'          => $totalItems,
+            'cotizaciones_activas' => $cotizacionesActivas,
+            'facturas_borrador'    => $facturasBorrador,
+            'facturas_emitidas'    => $facturasEmitidas,
+            'total_facturado'      => round((float) $totalesFacturas->total_facturado, 2),
+            'total_pagado'         => round((float) $totalesFacturas->total_pagado, 2),
+            'saldo_pendiente'      => round((float) $totalesFacturas->saldo_pendiente, 2),
+            'ingresos_facturas'    => round((float) $ingresosFacturas, 2),
+            'ingresos_mostrador'   => round((float) $ingresosMostrador, 2),
+            'ingresos_manuales'    => round((float) $ingresosManuales, 2),
+            'total_en_caja'        => round((float) $totalEnCaja, 2),
+            'egresos_compras'      => round((float) $egresosCompras, 2),
+            'egresos_manuales_tot' => round((float) $egresosManuales, 2),
+            'total_egresos'        => round((float) $totalEgresos, 2),
+            'balance_real'         => round((float) $balanceReal, 2),
+            'ultima_actividad'     => now(),
+        ];
+    }
+}
