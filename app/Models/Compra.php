@@ -8,7 +8,7 @@ class Compra extends Model
 {
     protected $table = 'compras';
 
-    protected $fillable = [
+     protected $fillable = [
         'empresa_id',
         'proveedor_id',
         'usuario_id',
@@ -22,9 +22,7 @@ class Compra extends Model
         'saldo_pendiente',
         'estado',
         'notas',
-        'archivo_path',
-        'archivo_mime',
-        'archivo_nombre',
+        
     ];
 
     protected $casts = [

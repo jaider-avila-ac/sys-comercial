@@ -49,7 +49,7 @@ class FacturaService
 
         $cabecera = [
             ...$cabecera,
-            'numero'        => '',
+            'numero'        => null,  // ✅ CRUCIAL: null para permitir múltiples borradores
             'estado'        => 'BORRADOR',
             'total_pagado'  => 0,
             'saldo'         => $cabecera['total'],
@@ -274,21 +274,21 @@ class FacturaService
             'ocurrido_en'          => now(),
         ]);
     }
-private function validarStockDisponibleParaDocumento(array $lineas, int $empresaId): void
-{
-    $cantidades = $this->agruparCantidadesPorItem($lineas, $empresaId);
+    private function validarStockDisponibleParaDocumento(array $lineas, int $empresaId): void
+    {
+        $cantidades = $this->agruparCantidadesPorItem($lineas, $empresaId);
 
-    foreach ($cantidades as $itemId => $cantidad) {
+        foreach ($cantidades as $itemId => $cantidad) {
 
-        $inventario = Inventario::where('empresa_id', $empresaId)
-            ->where('item_id', $itemId)
-            ->first();
+            $inventario = Inventario::where('empresa_id', $empresaId)
+                ->where('item_id', $itemId)
+                ->first();
 
-        if (! $inventario || $cantidad > $inventario->unidades_actuales) {
-            throw new HttpException(422, "Stock insuficiente para item {$itemId}");
+            if (! $inventario || $cantidad > $inventario->unidades_actuales) {
+                throw new HttpException(422, "Stock insuficiente para item {$itemId}");
+            }
         }
     }
-}
 
     private function agruparCantidadesPorItem(array $lineas, int $empresaId): array
     {
@@ -313,53 +313,53 @@ private function validarStockDisponibleParaDocumento(array $lineas, int $empresa
     }
 
     private function prepararDocumentoCrear(array $data, int $empresaId, int $usuarioId): array
-{
-    $lineasCalculadas = array_map(
-        fn($l) => $this->calculoService->calcularLinea($l),
-        $data['lineas']
-    );
+    {
+        $lineasCalculadas = array_map(
+            fn($l) => $this->calculoService->calcularLinea($l),
+            $data['lineas']
+        );
 
-    $totales = $this->calculoService->calcularTotalesDocumento($lineasCalculadas);
+        $totales = $this->calculoService->calcularTotalesDocumento($lineasCalculadas);
 
-    $cabecera = [
-        'empresa_id' => $empresaId,
-        'usuario_id' => $usuarioId,
-        'cliente_id' => $data['cliente_id'],
-        'fecha'      => $data['fecha'],
-        'notas'      => $data['notas'] ?? null,
-        ...$totales,
-    ];
+        $cabecera = [
+            'empresa_id' => $empresaId,
+            'usuario_id' => $usuarioId,
+            'cliente_id' => $data['cliente_id'],
+            'fecha'      => $data['fecha'],
+            'notas'      => $data['notas'] ?? null,
+            ...$totales,
+        ];
 
-    return [$cabecera, $lineasCalculadas];
-}
+        return [$cabecera, $lineasCalculadas];
+    }
 
-private function prepararDocumentoActualizar(Factura $factura, array $data, int $empresaId, int $usuarioId): array
-{
-    $lineasFuente = $data['lineas'] ?? $factura->lineas->map(fn($l) => [
-        'item_id'            => $l->item_id,
-        'descripcion_manual' => $l->descripcion_manual,
-        'cantidad'           => $l->cantidad,
-        'valor_unitario'     => $l->valor_unitario,
-        'descuento'          => $l->descuento,
-        'iva_pct'            => $l->iva_pct,
-    ])->toArray();
+    private function prepararDocumentoActualizar(Factura $factura, array $data, int $empresaId, int $usuarioId): array
+    {
+        $lineasFuente = $data['lineas'] ?? $factura->lineas->map(fn($l) => [
+            'item_id'            => $l->item_id,
+            'descripcion_manual' => $l->descripcion_manual,
+            'cantidad'           => $l->cantidad,
+            'valor_unitario'     => $l->valor_unitario,
+            'descuento'          => $l->descuento,
+            'iva_pct'            => $l->iva_pct,
+        ])->toArray();
 
-    $lineasCalculadas = array_map(
-        fn($l) => $this->calculoService->calcularLinea($l),
-        $lineasFuente
-    );
+        $lineasCalculadas = array_map(
+            fn($l) => $this->calculoService->calcularLinea($l),
+            $lineasFuente
+        );
 
-    $totales = $this->calculoService->calcularTotalesDocumento($lineasCalculadas);
+        $totales = $this->calculoService->calcularTotalesDocumento($lineasCalculadas);
 
-    $cabecera = [
-        'empresa_id' => $empresaId,
-        'usuario_id' => $usuarioId,
-        'cliente_id' => $data['cliente_id'] ?? $factura->cliente_id,
-        'fecha'      => $data['fecha'] ?? $factura->fecha,
-        'notas'      => array_key_exists('notas', $data) ? $data['notas'] : $factura->notas,
-        ...$totales,
-    ];
+        $cabecera = [
+            'empresa_id' => $empresaId,
+            'usuario_id' => $usuarioId,
+            'cliente_id' => $data['cliente_id'] ?? $factura->cliente_id,
+            'fecha'      => $data['fecha'] ?? $factura->fecha,
+            'notas'      => array_key_exists('notas', $data) ? $data['notas'] : $factura->notas,
+            ...$totales,
+        ];
 
-    return [$cabecera, $lineasCalculadas];
-}
+        return [$cabecera, $lineasCalculadas];
+    }
 }

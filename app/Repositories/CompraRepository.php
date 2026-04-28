@@ -59,24 +59,12 @@ class CompraRepository
         });
     }
 
-    public function confirmar(int $id, string $numero, int $usuarioId): Compra
+    public function confirmar(int $id, string $numero, int $usuarioId, ?array $archivoData = null): Compra
     {
-        return DB::transaction(function () use ($id, $numero, $usuarioId) {
+        return DB::transaction(function () use ($id, $numero, $usuarioId, $archivoData) {
             $compra = Compra::with('items.item')->lockForUpdate()->findOrFail($id);
 
-            $estado         = 'PENDIENTE';
-            $saldoPendiente = 0;
-
-            if ($compra->condicion_pago === 'CREDITO') {
-                $saldoPendiente = $compra->total;
-            }
-
-            $compra->update([
-                'numero'          => $numero,
-                'estado'          => $estado,
-                'saldo_pendiente' => $saldoPendiente,
-            ]);
-
+            // Actualizar inventario
             foreach ($compra->items as $compraItem) {
                 $item = $compraItem->item;
                 if (! $item || ! $item->controla_inventario) continue;
@@ -88,7 +76,7 @@ class CompraRepository
 
                 if ($inventario) {
                     $nuevasUnidades = $inventario->unidades_actuales + $compraItem->cantidad;
-                    $inventario->update(['unidades_actuales' => $nuevasUnidades, 'updated_at' => now()]);
+                    $inventario->update(['unidades_actuales' => $nuevasUnidades]);
 
                     InventarioMovimiento::create([
                         'empresa_id'           => $compra->empresa_id,
@@ -105,8 +93,16 @@ class CompraRepository
                 }
             }
 
+            // Si es CONTADO, actualizar estado y saldo a 0
             if ($compra->condicion_pago === 'CONTADO') {
-                $egreso = EgresoCompra::create([
+                $compra->update([
+                    'numero'          => $numero,
+                    'estado'          => 'PAGADA',
+                    'saldo_pendiente' => 0,
+                ]);
+
+                // Crear el egreso de pago contado con el archivo
+                $egresoData = [
                     'empresa_id'  => $compra->empresa_id,
                     'usuario_id'  => $usuarioId,
                     'compra_id'   => $compra->id,
@@ -114,8 +110,17 @@ class CompraRepository
                     'descripcion' => "Pago contado compra {$numero}",
                     'monto'       => $compra->total,
                     'medio_pago'  => 'CONTADO',
+                    'notas'       => null,
                     'estado'      => 'ACTIVO',
-                ]);
+                ];
+
+                if ($archivoData) {
+                    $egresoData['archivo_path'] = $archivoData['path'];
+                    $egresoData['archivo_mime'] = $archivoData['mime'];
+                    $egresoData['archivo_nombre'] = $archivoData['nombre'];
+                }
+
+                $egreso = EgresoCompra::create($egresoData);
 
                 CajaMovimiento::create([
                     'empresa_id'  => $compra->empresa_id,
@@ -127,8 +132,13 @@ class CompraRepository
                     'fecha'       => $egreso->fecha,
                     'created_at'  => now(),
                 ]);
-
-                $compra->update(['estado' => 'PAGADA', 'saldo_pendiente' => 0]);
+            } else {
+                // CREDITO: solo actualizar número y dejar saldo pendiente
+                $compra->update([
+                    'numero'          => $numero,
+                    'estado'          => 'PENDIENTE',
+                    'saldo_pendiente' => $compra->total,
+                ]);
             }
 
             return $compra->fresh(['items.item', 'proveedor', 'egresos']);
@@ -145,7 +155,7 @@ class CompraRepository
 
             $compra->update(['saldo_pendiente' => $nuevoSaldo, 'estado' => $nuevoEstado]);
 
-            $egreso = EgresoCompra::create([
+            $egresoDataToCreate = [
                 'empresa_id'  => $empresaId,
                 'usuario_id'  => $usuarioId,
                 'compra_id'   => $compra->id,
@@ -155,7 +165,15 @@ class CompraRepository
                 'medio_pago'  => $egresoData['medio_pago'],
                 'notas'       => $egresoData['notas'] ?? null,
                 'estado'      => 'ACTIVO',
-            ]);
+            ];
+            
+            if (isset($egresoData['archivo_path'])) {
+                $egresoDataToCreate['archivo_path'] = $egresoData['archivo_path'];
+                $egresoDataToCreate['archivo_mime'] = $egresoData['archivo_mime'];
+                $egresoDataToCreate['archivo_nombre'] = $egresoData['archivo_nombre'];
+            }
+            
+            $egreso = EgresoCompra::create($egresoDataToCreate);
 
             CajaMovimiento::create([
                 'empresa_id'  => $empresaId,
@@ -191,7 +209,7 @@ class CompraRepository
 
                 if ($inventario) {
                     $nuevasUnidades = max(0, $inventario->unidades_actuales - $compraItem->cantidad);
-                    $inventario->update(['unidades_actuales' => $nuevasUnidades, 'updated_at' => now()]);
+                    $inventario->update(['unidades_actuales' => $nuevasUnidades]);
 
                     InventarioMovimiento::create([
                         'empresa_id'           => $empresaId,

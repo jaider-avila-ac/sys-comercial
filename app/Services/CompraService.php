@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Compra;
-use App\Models\EmpresaResumen;
 use App\Repositories\CompraRepository;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -12,8 +11,6 @@ class CompraService
 {
     public function __construct(
         private readonly CompraRepository $compraRepository,
-        private readonly NumeracionService $numeracionService,
-        private readonly ResumenService $resumenService,
     ) {}
 
     public function listar(int $empresaId): Collection
@@ -34,121 +31,131 @@ class CompraService
 
     public function crear(array $data, int $empresaId, int $usuarioId): Compra
     {
-        [$cabecera, $items] = $this->prepararDocumento($data, $empresaId, $usuarioId);
+        // Calcular totales
+        $subtotal = 0;
+        foreach ($data['items'] as $item) {
+            $subtotal += $item['cantidad'] * $item['precio_unitario'];
+        }
+        
+        $impuestos = $data['impuestos'] ?? 0;
+        $total = $subtotal + $impuestos;
+        
+        $saldoPendiente = 0;
+        if (($data['condicion_pago'] ?? 'CONTADO') === 'CREDITO') {
+            $saldoPendiente = $total;
+        }
 
-        return $this->compraRepository->create($cabecera, $items);
+        $cabecera = [
+            'empresa_id'       => $empresaId,
+            'usuario_id'       => $usuarioId,
+            'proveedor_id'     => $data['proveedor_id'] ?? null,
+            'fecha'            => $data['fecha'],
+            'condicion_pago'   => $data['condicion_pago'] ?? 'CONTADO',
+            'fecha_vencimiento'=> $data['fecha_vencimiento'] ?? null,
+            'subtotal'         => $subtotal,
+            'impuestos'        => $impuestos,
+            'total'            => $total,
+            'saldo_pendiente'  => $saldoPendiente,
+            'estado'           => 'PENDIENTE',
+            'notas'            => $data['notas'] ?? null,
+            'numero'           => null,
+        ];
+
+        return $this->compraRepository->create($cabecera, $data['items']);
     }
 
-    public function confirmar(int $id, int $empresaId, int $usuarioId): Compra
+    public function confirmar(int $id, int $empresaId, int $usuarioId, ?array $archivoData = null): Compra
     {
         $compra = $this->obtener($id, $empresaId);
-
-        if ($compra->estado !== 'PENDIENTE' || $compra->numero !== '') {
-            throw new HttpException(409, 'Esta compra ya fue confirmada.');
+        
+        if ($compra->numero !== null) {
+            throw new HttpException(422, 'La compra ya ha sido confirmada.');
         }
 
-        if ($compra->condicion_pago === 'CONTADO') {
-            $this->validarDisponible($empresaId, (float) $compra->total);
-        }
+        // Generar número de compra
+        $ultimaCompra = Compra::where('empresa_id', $empresaId)
+            ->whereNotNull('numero')
+            ->orderBy('id', 'desc')
+            ->first();
+        
+        $consecutivo = $ultimaCompra ? intval(substr($ultimaCompra->numero, -6)) + 1 : 1;
+        $numero = 'COMP-' . str_pad($consecutivo, 6, '0', STR_PAD_LEFT);
 
-        $numero = $this->numeracionService->siguienteNumero($empresaId, 'COM');
-
-        return $this->compraRepository->confirmar($compra->id, $numero, $usuarioId);
+        return $this->compraRepository->confirmar($id, $numero, $usuarioId, $archivoData);
     }
 
-    public function registrarPago(int $id, array $data, int $empresaId, int $usuarioId): Compra
+    public function registrarPago(int $id, array $pagoData, int $empresaId, int $usuarioId): Compra
     {
         $compra = $this->obtener($id, $empresaId);
-
-        if ($compra->condicion_pago !== 'CREDITO') {
-            throw new HttpException(409, 'Solo se pueden abonar compras a crédito.');
+        
+        if (in_array($compra->estado, ['PAGADA', 'ANULADA'])) {
+            throw new HttpException(422, 'No se puede registrar pagos en compras pagadas o anuladas.');
         }
 
-        if (! in_array($compra->estado, ['PENDIENTE', 'PARCIAL'])) {
-            throw new HttpException(409, 'La compra no tiene saldo pendiente.');
+        $monto = $pagoData['monto'];
+        $saldoActual = (float) $compra->saldo_pendiente;
+        
+        if ($monto > $saldoActual) {
+            throw new HttpException(422, 'El monto del pago no puede ser mayor al saldo pendiente.');
         }
 
-        $monto = (float) $data['monto'];
+        $egresoData = [
+            'fecha'       => $pagoData['fecha'],
+            'descripcion' => $pagoData['descripcion'] ?? "Pago compra {$compra->numero}",
+            'medio_pago'  => $pagoData['medio_pago'],
+            'notas'       => $pagoData['notas'] ?? null,
+        ];
 
-        if ($monto > (float) $compra->saldo_pendiente) {
-            throw new HttpException(
-                409,
-                "El abono ({$monto}) supera el saldo pendiente ({$compra->saldo_pendiente})."
-            );
+        return $this->compraRepository->registrarPago($id, $monto, $empresaId, $usuarioId, $egresoData);
+    }
+
+    public function registrarPagoConArchivo(
+        int $id, 
+        float $monto, 
+        string $fecha, 
+        string $medioPago, 
+        string $descripcion, 
+        ?string $notas,
+        int $empresaId, 
+        int $usuarioId,
+        ?array $archivoData
+    ): Compra {
+        $compra = $this->obtener($id, $empresaId);
+        
+        if (in_array($compra->estado, ['PAGADA', 'ANULADA'])) {
+            throw new HttpException(422, 'No se puede registrar pagos en compras pagadas o anuladas.');
         }
 
-        $this->validarDisponible($empresaId, $monto);
+        $saldoActual = (float) $compra->saldo_pendiente;
+        
+        if ($monto > $saldoActual) {
+            throw new HttpException(422, 'El monto del pago no puede ser mayor al saldo pendiente.');
+        }
 
-        return $this->compraRepository->registrarPago($id, $monto, $empresaId, $usuarioId, $data);
+        $egresoData = [
+            'fecha'          => $fecha,
+            'descripcion'    => $descripcion,
+            'medio_pago'     => $medioPago,
+            'notas'          => $notas,
+        ];
+
+        if ($archivoData) {
+            $egresoData['archivo_path'] = $archivoData['path'];
+            $egresoData['archivo_mime'] = $archivoData['mime'];
+            $egresoData['archivo_nombre'] = $archivoData['nombre'];
+        }
+
+        return $this->compraRepository->registrarPago($id, $monto, $empresaId, $usuarioId, $egresoData);
     }
 
     public function anular(int $id, int $empresaId, int $usuarioId): Compra
     {
         $compra = $this->obtener($id, $empresaId);
-
+        
         if ($compra->estado === 'ANULADA') {
-            throw new HttpException(409, 'La compra ya está anulada.');
-        }
-
-        if ($compra->estado === 'PAGADA') {
-            throw new HttpException(409, 'No se puede anular una compra totalmente pagada.');
+            throw new HttpException(422, 'La compra ya está anulada.');
         }
 
         return $this->compraRepository->anular($id, $empresaId, $usuarioId);
-    }
-
-    private function prepararDocumento(array $data, int $empresaId, int $usuarioId): array
-    {
-        $items = $data['items'];
-        $subtotal = 0;
-
-        $itemsCalculados = array_map(function ($item) use (&$subtotal) {
-            $sub = round($item['cantidad'] * $item['precio_unitario'], 2);
-            $subtotal += $sub;
-
-            return [
-                'item_id'         => $item['item_id'],
-                'cantidad'        => (int) $item['cantidad'],
-                'precio_unitario' => (float) $item['precio_unitario'],
-                'subtotal'        => $sub,
-            ];
-        }, $items);
-
-        $impuestos = round((float) ($data['impuestos'] ?? 0), 2);
-        $total     = round($subtotal + $impuestos, 2);
-        $condicion = $data['condicion_pago'] ?? 'CONTADO';
-
-        $cabecera = [
-            'empresa_id'        => $empresaId,
-            'usuario_id'        => $usuarioId,
-            'proveedor_id'      => $data['proveedor_id'] ?? null,
-            'condicion_pago'    => $condicion,
-            'fecha'             => $data['fecha'] ?? now()->toDateString(),
-            'fecha_vencimiento' => $data['fecha_vencimiento'] ?? null,
-            'subtotal'          => $subtotal,
-            'impuestos'         => $impuestos,
-            'total'             => $total,
-            'saldo_pendiente'   => $condicion === 'CREDITO' ? $total : 0,
-            'numero'            => '',
-            'estado'            => 'PENDIENTE',
-            'notas'             => $data['notas'] ?? null,
-        ];
-
-        return [$cabecera, $itemsCalculados];
-    }
-
-    private function validarDisponible(int $empresaId, float $monto): void
-    {
-        $this->resumenService->recalcular($empresaId);
-
-        $resumen = EmpresaResumen::find($empresaId);
-        $disponible = (float) ($resumen?->balance_real ?? 0);
-
-        if ($monto > $disponible) {
-            throw new HttpException(
-                422,
-                "El monto supera lo disponible en caja. Disponible actual: {$disponible}."
-            );
-        }
     }
 }

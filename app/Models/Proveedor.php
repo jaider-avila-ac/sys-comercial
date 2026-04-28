@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Compra;
 
 class Proveedor extends Model
 {
@@ -40,4 +41,9 @@ class Proveedor extends Model
     {
         return $this->hasMany(Item::class, 'proveedor_id');
     }
+
+    public function compras()
+{
+    return $this->hasMany(Compra::class, 'proveedor_id');
+}
 }

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\EgresoCompra;
 use App\Repositories\EgresoCompraRepository;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class EgresoCompraService
@@ -15,12 +16,21 @@ class EgresoCompraService
 
     public function listar(int $empresaId): Collection
     {
-        return $this->egresoCompraRepository->allByEmpresa($empresaId);
+        $egresos = $this->egresoCompraRepository->allByEmpresa($empresaId);
+        
+        // Agregar URL del archivo a cada registro
+        return $egresos->map(function ($egreso) {
+            return $this->mapWithFileUrl($egreso);
+        });
     }
 
     public function listarPorCompra(int $compraId): Collection
     {
-        return $this->egresoCompraRepository->allByCompra($compraId);
+        $egresos = $this->egresoCompraRepository->allByCompra($compraId);
+        
+        return $egresos->map(function ($egreso) {
+            return $this->mapWithFileUrl($egreso);
+        });
     }
 
     public function obtener(int $id, int $empresaId): EgresoCompra
@@ -31,18 +41,32 @@ class EgresoCompraService
             throw new HttpException(404, 'Egreso de compra no encontrado.');
         }
 
-        return $egreso;
+        return $this->mapWithFileUrl($egreso);
     }
 
     /**
-     * Registrar un egreso de compra.
-     * Se usa tanto para compras de contado (compra_id puede ser null aún)
-     * como para pagos parciales de compras a crédito (compra_id requerido).
-     * La actualización del saldo de la compra la hace CompraService al llamar este método.
+     * Registrar un egreso de compra con archivo
      */
-    public function registrar(array $data, int $empresaId, int $usuarioId): EgresoCompra
+    public function registrar(array $data, int $empresaId, int $usuarioId, ?array $archivoData = null): EgresoCompra
     {
-        return $this->egresoCompraRepository->registrar($data, $empresaId, $usuarioId);
+        $egresoData = [
+            'compra_id'   => $data['compra_id'] ?? null,
+            'fecha'       => $data['fecha'],
+            'descripcion' => $data['descripcion'],
+            'monto'       => $data['monto'],
+            'medio_pago'  => $data['medio_pago'],
+            'notas'       => $data['notas'] ?? null,
+        ];
+        
+        if ($archivoData) {
+            $egresoData['archivo_path'] = $archivoData['path'];
+            $egresoData['archivo_mime'] = $archivoData['mime'];
+            $egresoData['archivo_nombre'] = $archivoData['nombre'];
+        }
+        
+        $egreso = $this->egresoCompraRepository->registrar($egresoData, $empresaId, $usuarioId);
+        
+        return $this->mapWithFileUrl($egreso);
     }
 
     public function anular(int $id, int $empresaId): EgresoCompra
@@ -53,6 +77,22 @@ class EgresoCompraService
             throw new HttpException(409, 'El egreso ya está anulado.');
         }
 
-        return $this->egresoCompraRepository->anular($id, $empresaId);
+        $egreso = $this->egresoCompraRepository->anular($id, $empresaId);
+        
+        return $this->mapWithFileUrl($egreso);
+    }
+    
+    /**
+     * Agrega la URL pública del archivo al modelo
+     */
+    private function mapWithFileUrl(EgresoCompra $egreso): EgresoCompra
+    {
+        if ($egreso->archivo_path) {
+            $egreso->archivo_url = Storage::url($egreso->archivo_path);
+        } else {
+            $egreso->archivo_url = null;
+        }
+        
+        return $egreso;
     }
 }

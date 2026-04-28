@@ -30,7 +30,6 @@ class EgresoCompraController extends Controller
     }
 
     // GET /api/compras/{compraId}/egresos
-    // (también expuesto desde CompraController más adelante)
     public function porCompra(int $compraId): JsonResponse
     {
         return response()->json(
@@ -49,12 +48,25 @@ class EgresoCompraController extends Controller
             'medio_pago'  => ['required', 'string', 'max:50'],
             'notas'       => ['nullable', 'string'],
         ]);
+        
+        // Manejar archivo si existe
+        $archivoData = null;
+        if ($request->hasFile('archivo')) {
+            $archivo = $request->file('archivo');
+            $path = $archivo->store('comprobantes/egresos', 'public');
+            $archivoData = [
+                'path' => $path,
+                'mime' => $archivo->getMimeType(),
+                'nombre' => $archivo->getClientOriginalName(),
+            ];
+        }
 
         return response()->json(
             $this->egresoCompraService->registrar(
                 $data,
                 $request->empresa_id_ctx,
                 $request->user()->id,
+                $archivoData
             ),
             201
         );

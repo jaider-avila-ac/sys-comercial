@@ -47,35 +47,40 @@ class ItemController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate([
+        // Validaciones
+        $validated = $request->validate([
             'nombre'                => ['required', 'string', 'max:180'],
             'tipo'                  => ['required', 'in:PRODUCTO,SERVICIO,INSUMO'],
             'descripcion'           => ['nullable', 'string'],
             'precio_compra'         => ['nullable', 'numeric', 'min:0'],
             'precio_venta_sugerido' => ['nullable', 'numeric', 'min:0'],
-            'controla_inventario'   => ['nullable', 'boolean'],
+            'controla_inventario'   => ['sometimes', 'boolean'],
             'unidad'                => ['nullable', 'string', 'max:30'],
             'proveedor_id'          => ['nullable', 'integer'],
             'unidades_minimas'      => ['nullable', 'integer', 'min:0'],
             'cantidad_inicial'      => ['nullable', 'integer', 'min:0'],
-            'fecha'                 => ['nullable', 'date'],
+            'is_activo'             => ['sometimes', 'boolean'],
             'condicion_pago'        => ['nullable', 'in:CONTADO,CREDITO,LIBRE'],
+            'fecha'                 => ['nullable', 'date'],
             'fecha_vencimiento'     => ['nullable', 'date', 'after_or_equal:fecha'],
-            'abono_inicial'         => ['nullable', 'numeric', 'min:0'],
             'medio_pago'            => ['nullable', 'string', 'max:50'],
             'impuestos'             => ['nullable', 'numeric', 'min:0'],
             'notas'                 => ['nullable', 'string'],
-            'is_activo'             => ['nullable', 'boolean'],
+            'abono_inicial'         => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        return response()->json(
-            $this->itemService->crear(
-                $data,
-                $request->empresa_id_ctx,
-                $request->user()->id,
-            ),
-            201
+        // Obtener el archivo si existe
+        $archivo = $request->hasFile('archivo') ? $request->file('archivo') : null;
+
+        // Llamar al servicio
+        $resultado = $this->itemService->crear(
+            $validated,
+            $request->empresa_id_ctx,
+            $request->user()->id,
+            $archivo
         );
+
+        return response()->json($resultado, 201);
     }
 
     public function update(Request $request, int $id): JsonResponse

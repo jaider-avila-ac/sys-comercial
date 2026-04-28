@@ -22,10 +22,12 @@ class InventarioMovimiento extends Model
     ];
 
     protected $casts = [
-        'unidades'             => 'integer',
-        'unidades_resultantes' => 'integer',
-        'ocurrido_en'          => 'datetime',
-    ];
+    'tipo'                 => 'string', 
+    'referencia_tipo'      => 'string',
+    'unidades'             => 'integer',
+    'unidades_resultantes' => 'integer',
+    'ocurrido_en'          => 'datetime',
+];
 
     public $timestamps = false;
 

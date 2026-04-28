@@ -3,55 +3,44 @@
 namespace App\Repositories;
 
 use App\Models\Cotizacion;
-use App\Models\CotizacionLinea;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CotizacionRepository
 {
-    public function paginate(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function paginar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        $search    = $filters['search']    ?? '';
-        $estado    = $filters['estado']    ?? null;
-        $clienteId = $filters['cliente_id'] ?? null;
-        $desde     = $filters['desde']     ?? null;
-        $hasta     = $filters['hasta']     ?? null;
+        $query = Cotizacion::where('empresa_id', $empresaId)
+            ->with(['cliente'])
+            ->orderByDesc('created_at');
 
-        return Cotizacion::where('empresa_id', $empresaId)
-            ->with(['cliente', 'usuario'])
-            ->when($search, fn($q) => $q->where(fn($q) =>
-                $q->where('numero', 'like', "%{$search}%")
-                  ->orWhereHas('cliente', fn($q) =>
-                        $q->where('nombre_razon_social', 'like', "%{$search}%"))
-            ))
-            ->when($estado,    fn($q) => $q->where('estado',     $estado))
-            ->when($clienteId, fn($q) => $q->where('cliente_id', $clienteId))
-            ->when($desde,     fn($q) => $q->whereDate('fecha',  '>=', $desde))
-            ->when($hasta,     fn($q) => $q->whereDate('fecha',  '<=', $hasta))
-            ->orderByDesc('created_at')
-            ->paginate($perPage);
-    }
+        if (!empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('numero', 'like', '%' . $filters['search'] . '%')
+                  ->orWhereHas('cliente', fn($c) =>
+                      $c->where('nombre_razon_social', 'like', '%' . $filters['search'] . '%')
+                  );
+            });
+        }
 
-    public function allByEmpresa(int $empresaId): Collection
-    {
-        return Cotizacion::where('empresa_id', $empresaId)
-            ->with(['cliente', 'usuario'])
-            ->orderByDesc('created_at')
-            ->get();
+        if (!empty($filters['estado'])) {
+            $query->where('estado', $filters['estado']);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function findById(int $id): ?Cotizacion
     {
-        return Cotizacion::with(['lineas.item', 'cliente', 'usuario'])->find($id);
+        return Cotizacion::with(['cliente', 'lineas.item'])->find($id);
     }
 
     public function create(array $cabecera, array $lineas): Cotizacion
     {
         return DB::transaction(function () use ($cabecera, $lineas) {
             $cotizacion = Cotizacion::create($cabecera);
-            $this->sincronizarLineas($cotizacion->id, $lineas);
-            return $cotizacion->fresh(['lineas.item', 'cliente', 'usuario']);
+            $this->syncLineas($cotizacion, $lineas); // ✅ guardar líneas
+            return $cotizacion->fresh(['cliente', 'lineas.item']);
         });
     }
 
@@ -60,8 +49,12 @@ class CotizacionRepository
         return DB::transaction(function () use ($id, $cabecera, $lineas) {
             $cotizacion = Cotizacion::findOrFail($id);
             $cotizacion->update($cabecera);
-            $this->sincronizarLineas($id, $lineas);
-            return $cotizacion->fresh(['lineas.item', 'cliente', 'usuario']);
+
+            if (!empty($lineas)) {
+                $this->syncLineas($cotizacion, $lineas); // ✅ reemplazar líneas
+            }
+
+            return $cotizacion->fresh(['cliente', 'lineas.item']);
         });
     }
 
@@ -69,20 +62,30 @@ class CotizacionRepository
     {
         $cotizacion = Cotizacion::findOrFail($id);
         $cotizacion->update(['estado' => $estado]);
-        return $cotizacion->fresh();
+        return $cotizacion->fresh(['cliente', 'lineas.item']);
     }
 
     public function delete(int $id): void
     {
-        DB::transaction(function () use ($id) {
-            CotizacionLinea::where('cotizacion_id', $id)->delete();
-            Cotizacion::findOrFail($id)->delete();
-        });
+        Cotizacion::findOrFail($id)->delete();
     }
 
-    private function sincronizarLineas(int $cotizacionId, array $lineas): void
+    // ── Privado ───────────────────────────────────────────────────────────────
+    private function syncLineas(Cotizacion $cotizacion, array $lineas): void
     {
-        CotizacionLinea::where('cotizacion_id', $cotizacionId)->delete();
-        CotizacionLinea::insert(array_map(fn($l) => [...$l, 'cotizacion_id' => $cotizacionId], $lineas));
+        $cotizacion->lineas()->delete(); // borrar las anteriores
+
+        foreach ($lineas as $linea) {
+            $cotizacion->lineas()->create([
+                'item_id'            => $linea['item_id']            ?? null,
+                'descripcion_manual' => $linea['descripcion_manual'] ?? null,
+                'cantidad'           => $linea['cantidad'],
+                'valor_unitario'     => $linea['valor_unitario'],
+                'descuento'          => $linea['descuento']          ?? 0,
+                'iva_pct'            => $linea['iva_pct']            ?? 0,
+                'iva_valor'          => $linea['iva_valor']          ?? 0,
+                'total_linea'        => $linea['total_linea']        ?? 0,
+            ]);
+        }
     }
 }

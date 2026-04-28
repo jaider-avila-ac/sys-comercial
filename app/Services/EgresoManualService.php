@@ -6,6 +6,7 @@ use App\Models\EgresoManual;
 use App\Models\EmpresaResumen;
 use App\Repositories\EgresoManualRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class EgresoManualService
@@ -17,7 +18,19 @@ class EgresoManualService
 
     public function listar(int $empresaId, array $filters = []): LengthAwarePaginator
     {
-        return $this->egresoManualRepository->paginate($empresaId, $filters);
+        $paginator = $this->egresoManualRepository->paginate($empresaId, $filters);
+        
+        // Agregar URL del archivo a cada registro
+        $paginator->getCollection()->transform(function ($egreso) {
+            if ($egreso->archivo_path) {
+                $egreso->archivo_url = Storage::url($egreso->archivo_path);
+            } else {
+                $egreso->archivo_url = null;
+            }
+            return $egreso;
+        });
+        
+        return $paginator;
     }
 
     public function obtener(int $id, int $empresaId): EgresoManual
@@ -27,20 +40,42 @@ class EgresoManualService
         if (! $egreso || $egreso->empresa_id !== $empresaId) {
             throw new HttpException(404, 'Egreso no encontrado.');
         }
+        
+        if ($egreso->archivo_path) {
+            $egreso->archivo_url = Storage::url($egreso->archivo_path);
+        }
 
         return $egreso;
     }
 
-    public function registrar(array $data, int $empresaId, int $usuarioId): EgresoManual
+    public function registrar(array $data, int $empresaId, int $usuarioId, ?array $archivoData = null): EgresoManual
     {
         $monto = (float) ($data['monto'] ?? 0);
 
         $this->validarMontoDisponibleParaRegistrar($empresaId, $monto);
+        
+        $egresoData = [
+            'descripcion' => $data['descripcion'],
+            'monto'       => $monto,
+            'notas'       => $data['notas'] ?? null,
+        ];
+        
+        if ($archivoData) {
+            $egresoData['archivo_path'] = $archivoData['path'];
+            $egresoData['archivo_mime'] = $archivoData['mime'];
+            $egresoData['archivo_nombre'] = $archivoData['nombre'];
+        }
+        
+        $egreso = $this->egresoManualRepository->registrar($egresoData, $empresaId, $usuarioId);
+        
+        if ($egreso->archivo_path) {
+            $egreso->archivo_url = Storage::url($egreso->archivo_path);
+        }
 
-        return $this->egresoManualRepository->registrar($data, $empresaId, $usuarioId);
+        return $egreso;
     }
 
-    public function actualizar(int $id, array $data, int $empresaId): EgresoManual
+    public function actualizar(int $id, array $data, int $empresaId, ?array $archivoData = null): EgresoManual
     {
         $egreso = $this->obtener($id, $empresaId);
 
@@ -53,8 +88,39 @@ class EgresoManualService
             : (float) $egreso->monto;
 
         $this->validarMontoDisponibleParaActualizar($empresaId, $egreso, $montoNuevo);
+        
+        $egresoData = [];
+        
+        if (array_key_exists('descripcion', $data)) {
+            $egresoData['descripcion'] = $data['descripcion'];
+        }
+        
+        if (array_key_exists('monto', $data)) {
+            $egresoData['monto'] = $montoNuevo;
+        }
+        
+        if (array_key_exists('notas', $data)) {
+            $egresoData['notas'] = $data['notas'];
+        }
+        
+        // Si hay nuevo archivo, reemplazar el anterior
+        if ($archivoData) {
+            // Eliminar archivo anterior si existe
+            if ($egreso->archivo_path) {
+                Storage::disk('public')->delete($egreso->archivo_path);
+            }
+            $egresoData['archivo_path'] = $archivoData['path'];
+            $egresoData['archivo_mime'] = $archivoData['mime'];
+            $egresoData['archivo_nombre'] = $archivoData['nombre'];
+        }
 
-        return $this->egresoManualRepository->actualizar($id, $data, $empresaId);
+        $egreso = $this->egresoManualRepository->actualizar($id, $egresoData, $empresaId);
+        
+        if ($egreso->archivo_path) {
+            $egreso->archivo_url = Storage::url($egreso->archivo_path);
+        }
+
+        return $egreso;
     }
 
     public function anular(int $id, int $empresaId): EgresoManual
@@ -65,7 +131,13 @@ class EgresoManualService
             throw new HttpException(422, 'El egreso ya está anulado.');
         }
 
-        return $this->egresoManualRepository->anular($id, $empresaId);
+        $egreso = $this->egresoManualRepository->anular($id, $empresaId);
+        
+        if ($egreso->archivo_path) {
+            $egreso->archivo_url = Storage::url($egreso->archivo_path);
+        }
+
+        return $egreso;
     }
 
     private function validarMontoDisponibleParaRegistrar(int $empresaId, float $monto): void
@@ -91,7 +163,7 @@ class EgresoManualService
         $balanceActual = (float) ($resumen?->balance_real ?? 0);
 
         // Como el balance actual ya tiene descontado este egreso,
-        // lo “devolvemos” temporalmente para calcular cuánto realmente puede volver a gastar.
+        // lo "devolvemos" temporalmente para calcular cuánto realmente puede volver a gastar.
         $disponibleAjustado = $balanceActual + (float) $egresoActual->monto;
 
         if ($montoNuevo > $disponibleAjustado) {

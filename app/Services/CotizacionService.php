@@ -15,10 +15,10 @@ class CotizacionService
         private readonly NumeracionService             $numeracionService,
     ) {}
 
-    public function listar(int $empresaId): Collection
-    {
-        return $this->cotizacionRepository->allByEmpresa($empresaId);
-    }
+   public function listar(int $empresaId, array $filters = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+{
+    return $this->cotizacionRepository->paginar($empresaId, $filters);
+}
 
     public function obtener(int $id, int $empresaId): Cotizacion
     {
@@ -32,15 +32,14 @@ class CotizacionService
     }
 
     public function crear(array $data, int $empresaId, int $usuarioId): Cotizacion
-    {
-        [$cabecera, $lineas] = $this->prepararDocumento($data, $empresaId, $usuarioId);
+{
+    [$cabecera, $lineas] = $this->prepararDocumento($data, $empresaId, $usuarioId);
 
-        // Borrador no consume numeración aún
-        $cabecera['numero'] = '';
-        $cabecera['estado'] = 'BORRADOR';
+    $cabecera['numero'] = null; // ✅ NULL permite múltiples borradores
+    $cabecera['estado'] = 'BORRADOR';
 
-        return $this->cotizacionRepository->create($cabecera, $lineas);
-    }
+    return $this->cotizacionRepository->create($cabecera, $lineas);
+}
 
     public function actualizar(int $id, array $data, int $empresaId, int $usuarioId): Cotizacion
     {

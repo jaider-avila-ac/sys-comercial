@@ -29,16 +29,23 @@ class ProveedorController extends Controller
     {
         $proveedor = $this->proveedorService->obtener($id, $request->empresa_id_ctx);
 
-        // Items del catálogo asignados a este proveedor
         $items = $proveedor->items()->get();
 
-        // Resumen de compras
-        $compras = $proveedor->compras()->where('empresa_id', $request->empresa_id_ctx);
+        // ✅ Verificar que la relación existe antes de usarla
         $resumen = [
-            'total_compras' => $compras->count(),
-            'monto_total'   => $compras->sum('total'),
-            'deuda_total'   => $compras->sum('saldo_pendiente'),
+            'total_compras' => 0,
+            'monto_total'   => 0,
+            'deuda_total'   => 0,
         ];
+
+        if (method_exists($proveedor, 'compras')) {
+            $compras = $proveedor->compras()->where('empresa_id', $request->empresa_id_ctx);
+            $resumen = [
+                'total_compras' => $compras->count(),
+                'monto_total'   => $compras->sum('total'),
+                'deuda_total'   => $compras->sum('saldo_pendiente'),
+            ];
+        }
 
         return response()->json([
             'proveedor'       => $proveedor,
@@ -46,7 +53,6 @@ class ProveedorController extends Controller
             'resumen_compras' => $resumen,
         ]);
     }
-
     // POST /api/proveedores
     public function store(Request $request): JsonResponse
     {

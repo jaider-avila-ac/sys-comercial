@@ -36,14 +36,26 @@ class EgresoManualController extends Controller
             'descripcion' => ['required', 'string', 'max:255'],
             'monto'       => ['required', 'numeric', 'min:0.01'],
             'notas'       => ['nullable', 'string'],
-            'archivo'     => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
         ]);
+        
+        // Manejar archivo si existe
+        $archivoData = null;
+        if ($request->hasFile('archivo')) {
+            $archivo = $request->file('archivo');
+            $path = $archivo->store('comprobantes/egresos_manuales', 'public');
+            $archivoData = [
+                'path' => $path,
+                'mime' => $archivo->getMimeType(),
+                'nombre' => $archivo->getClientOriginalName(),
+            ];
+        }
 
         return response()->json(
             $this->egresoManualService->registrar(
                 $data,
                 $request->empresa_id_ctx,
                 $request->user()->id,
+                $archivoData
             ),
             201
         );
@@ -54,12 +66,23 @@ class EgresoManualController extends Controller
         $data = $request->validate([
             'descripcion' => ['sometimes', 'string', 'max:255'],
             'monto'       => ['sometimes', 'numeric', 'min:0.01'],
-            'notas'       => ['nullable', 'string'],
-            'archivo'     => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
+            'notas'       => ['sometimes', 'nullable', 'string'],
         ]);
+        
+        // Manejar archivo si existe
+        $archivoData = null;
+        if ($request->hasFile('archivo')) {
+            $archivo = $request->file('archivo');
+            $path = $archivo->store('comprobantes/egresos_manuales', 'public');
+            $archivoData = [
+                'path' => $path,
+                'mime' => $archivo->getMimeType(),
+                'nombre' => $archivo->getClientOriginalName(),
+            ];
+        }
 
         return response()->json(
-            $this->egresoManualService->actualizar($id, $data, $request->empresa_id_ctx)
+            $this->egresoManualService->actualizar($id, $data, $request->empresa_id_ctx, $archivoData)
         );
     }
 

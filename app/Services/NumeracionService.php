@@ -3,17 +3,22 @@
 namespace App\Services;
 
 use App\Models\Numeracion;
+use App\Repositories\NumeracionRepository;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class NumeracionService
 {
+    public function __construct(
+        private readonly NumeracionRepository $numeracionRepository,
+    ) {}
+
     public function listar(int $empresaId): Collection
     {
         $this->asegurarNumeracionesBase($empresaId);
 
         return Numeracion::where('empresa_id', $empresaId)
-            ->orderBy('tipo')
+            ->orderByRaw("FIELD(tipo, 'COT','FAC','REC','COM','MOS','EGR')")
             ->get();
     }
 
@@ -22,26 +27,8 @@ class NumeracionService
         $this->validarTipo($tipo);
         $this->asegurarNumeracionesBase($empresaId);
 
-        $numeracion = Numeracion::where('empresa_id', $empresaId)
-            ->where('tipo', $tipo)
-            ->lockForUpdate()
-            ->first();
-
-        if (! $numeracion) {
-            throw new HttpException(404, "No se encontró la numeración para el tipo {$tipo}.");
-        }
-
-        $siguiente = $numeracion->consecutivo_actual + 1;
-
-        $numeracion->update([
-            'consecutivo_actual' => $siguiente,
-        ]);
-
-        return $this->formatearNumero(
-            $numeracion->prefijo,
-            $siguiente,
-            $numeracion->relleno
-        );
+        // ✅ Delegar al repository que ya tiene lockForUpdate + transaction
+        return $this->numeracionRepository->incrementar($empresaId, $tipo);
     }
 
     public function actualizar(int $empresaId, string $tipo, array $data): Numeracion
@@ -55,31 +42,25 @@ class NumeracionService
             throw new HttpException(422, 'Solo se puede actualizar prefijo y relleno.');
         }
 
-        $numeracion = Numeracion::where('empresa_id', $empresaId)
-            ->where('tipo', $tipo)
-            ->first();
+        $numeracion = $this->numeracionRepository->findByEmpresaYTipo($empresaId, $tipo);
 
         if (! $numeracion) {
             throw new HttpException(404, "No se encontró la numeración para el tipo {$tipo}.");
         }
 
-        $numeracion->update($permitidos);
-
-        return $numeracion->fresh();
+        return $this->numeracionRepository->update($empresaId, $tipo, $permitidos);
     }
 
     private function asegurarNumeracionesBase(int $empresaId): void
     {
         foreach (Numeracion::TIPOS as $tipo) {
             Numeracion::firstOrCreate(
+                ['empresa_id' => $empresaId, 'tipo' => $tipo],
                 [
-                    'empresa_id' => $empresaId,
-                    'tipo'       => $tipo,
-                ],
-                [
-                    'prefijo'             => $this->prefijoPorTipo($tipo),
-                    'relleno'             => 5,
-                    'consecutivo_actual'  => 0,
+                    'prefijo'      => $this->prefijoPorTipo($tipo),
+                    'relleno'      => 5,
+                    'consecutivo'  => 0,  // ✅ nombre correcto de columna
+                    'updated_at'   => now(),
                 ]
             );
         }
@@ -93,11 +74,6 @@ class NumeracionService
             'COM' => 'COM',
             default => $tipo,
         };
-    }
-
-    private function formatearNumero(string $prefijo, int $consecutivo, int $relleno): string
-    {
-        return $prefijo . '-' . str_pad((string) $consecutivo, $relleno, '0', STR_PAD_LEFT);
     }
 
     private function validarTipo(string $tipo): void

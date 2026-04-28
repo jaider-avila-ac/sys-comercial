@@ -119,8 +119,7 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
     Route::get('/',             [EgresoManualController::class, 'index']);
     Route::post('/',            [EgresoManualController::class, 'store']);
     Route::get('/{id}',         [EgresoManualController::class, 'show']);
-    Route::put('/{id}',         [EgresoManualController::class, 'update']);   // ✅ nuevo
-    Route::delete('/{id}',      [EgresoManualController::class, 'destroy']);  // ✅ nuevo
+    Route::put('/{id}',         [EgresoManualController::class, 'update']);   // ✅ nuevo // ✅ nuevo
     Route::post('/{id}/anular', [EgresoManualController::class, 'anular']);
 });
 
@@ -158,6 +157,15 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
         Route::get('historial',      [SesionController::class, 'historial']);
         Route::get('usuario/{id}',   [SesionController::class, 'porUsuario']);
     });
+
+    Route::prefix('egresos/compras')->group(function () {
+    Route::get('/',             [EgresoCompraController::class, 'index']);
+    Route::post('/',            [EgresoCompraController::class, 'store']);
+    Route::get('/{id}',         [EgresoCompraController::class, 'show']);
+    Route::post('/{id}/anular', [EgresoCompraController::class, 'anular']);
+    // 👇 AGREGAR ESTA LÍNEA
+    Route::get('/por-compra/{compraId}', [EgresoCompraController::class, 'porCompra']);
+});
 
     // Dashboard empresa (cualquier rol autenticado)
     Route::get('dashboard', [DashboardController::class, 'index']);
