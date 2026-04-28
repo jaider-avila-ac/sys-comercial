@@ -6,12 +6,30 @@ use App\Models\CajaMovimiento;
 use App\Models\Inventario;
 use App\Models\InventarioMovimiento;
 use App\Models\IngresoMostrador;
-use App\Repositories\Contracts\IngresoMostradorRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
+class IngresoMostradorRepository
 {
+    public function paginate(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
+    {
+        $search = $filters['search'] ?? '';
+        $desde  = $filters['desde']  ?? null;
+        $hasta  = $filters['hasta']  ?? null;
+
+        return IngresoMostrador::where('empresa_id', $empresaId)
+            ->with(['usuario', 'item'])
+            ->when($search, fn($q) => $q->where(fn($q) =>
+                $q->where('numero',      'like', "%{$search}%")
+                  ->orWhere('descripcion','like', "%{$search}%")
+            ))
+            ->when($desde, fn($q) => $q->whereDate('fecha', '>=', $desde))
+            ->when($hasta, fn($q) => $q->whereDate('fecha', '<=', $hasta))
+            ->orderByDesc('fecha')
+            ->paginate($perPage);
+    }
+
     public function allByEmpresa(int $empresaId): Collection
     {
         return IngresoMostrador::where('empresa_id', $empresaId)
@@ -25,17 +43,9 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
         return IngresoMostrador::with(['usuario', 'item'])->find($id);
     }
 
-    /**
-     * Registrar venta mostrador:
-     * 1. Crear registro ingresos_mostrador
-     * 2. Descontar inventario si el item lo controla
-     * 3. Registrar movimiento de inventario
-     * 4. Registrar en caja como INGRESO_MOSTRADOR
-     */
     public function registrar(array $data, int $empresaId, int $usuarioId): IngresoMostrador
     {
         return DB::transaction(function () use ($data, $empresaId, $usuarioId) {
-
             $ingreso = IngresoMostrador::create([
                 ...$data,
                 'empresa_id' => $empresaId,
@@ -43,10 +53,8 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
                 'estado'     => 'ACTIVO',
             ]);
 
-            // Descontar inventario si aplica
             if ($ingreso->item_id) {
                 $item = $ingreso->item;
-
                 if ($item && $item->controla_inventario) {
                     $inventario = Inventario::where('empresa_id', $empresaId)
                         ->where('item_id', $ingreso->item_id)
@@ -55,11 +63,7 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
 
                     if ($inventario) {
                         $nuevasUnidades = max(0, $inventario->unidades_actuales - $ingreso->cantidad);
-
-                        $inventario->update([
-                            'unidades_actuales' => $nuevasUnidades,
-                            'updated_at'        => now(),
-                        ]);
+                        $inventario->update(['unidades_actuales' => $nuevasUnidades, 'updated_at' => now()]);
 
                         InventarioMovimiento::create([
                             'empresa_id'           => $empresaId,
@@ -77,7 +81,6 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
                 }
             }
 
-            // Registrar en caja
             CajaMovimiento::create([
                 'empresa_id'  => $empresaId,
                 'usuario_id'  => $usuarioId,
@@ -93,21 +96,15 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
         });
     }
 
-    /**
-     * Anular: revierte inventario y elimina movimiento de caja.
-     */
     public function anular(int $id, int $empresaId, int $usuarioId): IngresoMostrador
     {
         return DB::transaction(function () use ($id, $empresaId, $usuarioId) {
-
             $ingreso = IngresoMostrador::where('empresa_id', $empresaId)
                 ->lockForUpdate()
                 ->findOrFail($id);
 
-            // Revertir inventario si aplica
             if ($ingreso->item_id) {
                 $item = $ingreso->item;
-
                 if ($item && $item->controla_inventario) {
                     $inventario = Inventario::where('empresa_id', $empresaId)
                         ->where('item_id', $ingreso->item_id)
@@ -116,11 +113,7 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
 
                     if ($inventario) {
                         $nuevasUnidades = $inventario->unidades_actuales + $ingreso->cantidad;
-
-                        $inventario->update([
-                            'unidades_actuales' => $nuevasUnidades,
-                            'updated_at'        => now(),
-                        ]);
+                        $inventario->update(['unidades_actuales' => $nuevasUnidades, 'updated_at' => now()]);
 
                         InventarioMovimiento::create([
                             'empresa_id'           => $empresaId,
@@ -138,14 +131,12 @@ class IngresoMostradorRepository implements IngresoMostradorRepositoryInterface
                 }
             }
 
-            // Eliminar movimiento de caja
             CajaMovimiento::where('origen_tipo', 'INGRESO_MOSTRADOR')
                 ->where('origen_id', $id)
                 ->where('empresa_id', $empresaId)
                 ->delete();
 
             $ingreso->update(['estado' => 'ANULADO']);
-
             return $ingreso->fresh();
         });
     }

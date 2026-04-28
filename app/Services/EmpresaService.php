@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\Empresa;
-use App\Repositories\Contracts\EmpresaRepositoryInterface;
-use App\Repositories\Contracts\NumeracionRepositoryInterface;
+use App\Repositories\EmpresaRepository;
+use App\Repositories\NumeracionRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -13,8 +13,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class EmpresaService
 {
     public function __construct(
-        private readonly EmpresaRepositoryInterface   $empresaRepository,
-        private readonly NumeracionRepositoryInterface $numeracionRepository,
+        private readonly EmpresaRepository $empresaRepository,
+        private readonly NumeracionRepository $numeracionRepository,
     ) {}
 
     public function listar(): Collection
@@ -33,16 +33,11 @@ class EmpresaService
         return $empresa;
     }
 
-    /**
-     * Crea la empresa y sus 6 numeraciones en una sola transacción.
-     * Cada empresa siempre empieza desde cero, sin importar otras empresas.
-     */
     public function crear(array $data): Empresa
     {
         return DB::transaction(function () use ($data) {
             $empresa = $this->empresaRepository->create($data);
 
-            // Crear numeraciones iniciales para la nueva empresa
             $this->numeracionRepository->crearParaEmpresa($empresa->id);
 
             return $empresa;
@@ -52,6 +47,7 @@ class EmpresaService
     public function actualizar(int $id, array $data): Empresa
     {
         $this->obtener($id);
+
         return $this->empresaRepository->update($id, $data);
     }
 
@@ -65,8 +61,6 @@ class EmpresaService
 
         $this->empresaRepository->delete($id);
     }
-
-    // ── Logo ──────────────────────────────────────────────────────────────────
 
     public function subirLogo(int $id, \Illuminate\Http\UploadedFile $archivo): Empresa
     {

@@ -3,14 +3,14 @@
 namespace App\Services;
 
 use App\Models\EgresoCompra;
-use App\Repositories\Contracts\EgresoCompraRepositoryInterface;
+use App\Repositories\EgresoCompraRepository;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class EgresoCompraService
 {
     public function __construct(
-        private readonly EgresoCompraRepositoryInterface $egresoCompraRepository,
+        private readonly EgresoCompraRepository $egresoCompraRepository,
     ) {}
 
     public function listar(int $empresaId): Collection

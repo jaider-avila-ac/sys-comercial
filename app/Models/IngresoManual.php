@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class IngresoManual extends Model
 {
@@ -23,9 +24,13 @@ class IngresoManual extends Model
 
     protected $casts = [
         'monto'      => 'decimal:2',
-        'fecha'      => 'date',
+        'fecha'      => 'date:Y-m-d',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+    ];
+
+    protected $appends = [
+        'archivo_url',
     ];
 
     public $timestamps = true;
@@ -38,5 +43,14 @@ class IngresoManual extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function getArchivoUrlAttribute(): ?string
+    {
+        if (! $this->archivo_path) {
+            return null;
+        }
+
+        return Storage::url($this->archivo_path);
     }
 }

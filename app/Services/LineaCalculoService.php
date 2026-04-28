@@ -2,43 +2,36 @@
 
 namespace App\Services;
 
-/**
- * Servicio puro de cálculo — sin estado, sin BD.
- * Lo usan CotizacionService y FacturaService para no repetir lógica.
- *
- * IVA global vs por línea:
- *   El frontend decide. Si quiere IVA global manda el mismo iva_pct en todas
- *   las líneas. Si por línea, cada una trae el suyo. El backend solo calcula.
- */
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use App\Models\Item; // 🔥 IMPORTANTE
+
 class LineaCalculoService
 {
-    /**
-     * Calcula los valores de una línea a partir de los datos crudos.
-     *
-     * @param  array{
-     *   item_id: int|null,
-     *   descripcion_manual: string|null,
-     *   cantidad: int,
-     *   valor_unitario: float,
-     *   descuento: float,
-     *   iva_pct: float,
-     * } $linea
-     */
     public function calcularLinea(array $linea): array
     {
-        $cantidad      = (int)   ($linea['cantidad']       ?? 1);
-        $valorUnitario = (float) ($linea['valor_unitario'] ?? 0);
-        $descuento     = (float) ($linea['descuento']      ?? 0);
-        $ivaPct        = (float) ($linea['iva_pct']        ?? 0);
+        $itemId            = $this->toInt($linea['item_id'] ?? null);
+        $descripcionManual = trim((string) ($linea['descripcion_manual'] ?? ''));
+        $cantidad          = $this->toInt($linea['cantidad'] ?? 1);
+        $valorUnitario     = $this->toFloat($linea['valor_unitario'] ?? 0);
+        $descuento         = $this->toFloat($linea['descuento'] ?? 0);
+        $ivaPct            = $this->toFloat($linea['iva_pct'] ?? 0);
 
-        $subtotalLinea = $cantidad * $valorUnitario;
-        $baseIva       = $subtotalLinea - $descuento;
-        $ivaValor      = round($baseIva * ($ivaPct / 100), 2);
-        $totalLinea    = round($baseIva + $ivaValor, 2);
+        $this->validarLinea($itemId, $descripcionManual, $cantidad, $valorUnitario, $descuento, $ivaPct);
+
+        // 🔹 Cálculos
+        $subtotalLinea = $this->round2($cantidad * $valorUnitario);
+
+        if ($descuento > $subtotalLinea) {
+            throw new HttpException(422, 'El descuento no puede superar el subtotal de la línea.');
+        }
+
+        $baseIva    = $this->round2($subtotalLinea - $descuento);
+        $ivaValor   = $this->round2($baseIva * ($ivaPct / 100));
+        $totalLinea = $this->round2($baseIva + $ivaValor);
 
         return [
-            'item_id'            => $linea['item_id']            ?? null,
-            'descripcion_manual' => $linea['descripcion_manual'] ?? null,
+            'item_id'            => $itemId,
+            'descripcion_manual' => $descripcionManual,
             'cantidad'           => $cantidad,
             'valor_unitario'     => $valorUnitario,
             'descuento'          => $descuento,
@@ -48,29 +41,87 @@ class LineaCalculoService
         ];
     }
 
-    /**
-     * Calcula los totales del documento a partir de líneas ya calculadas.
-     *
-     * @param  array[] $lineasCalculadas  Resultado de calcularLinea() por cada línea
-     * @return array{ subtotal, total_descuentos, total_iva, total }
-     */
     public function calcularTotalesDocumento(array $lineasCalculadas): array
     {
-        $subtotal        = 0;
+        $subtotal = 0;
         $totalDescuentos = 0;
-        $totalIva        = 0;
+        $totalIva = 0;
 
         foreach ($lineasCalculadas as $linea) {
-            $subtotal        += $linea['cantidad'] * $linea['valor_unitario'];
-            $totalDescuentos += $linea['descuento'];
-            $totalIva        += $linea['iva_valor'];
+            $subtotal += $this->round2($linea['cantidad'] * $linea['valor_unitario']);
+            $totalDescuentos += $this->round2($linea['descuento']);
+            $totalIva += $this->round2($linea['iva_valor']);
         }
 
+        $subtotal = $this->round2($subtotal);
+        $totalDescuentos = $this->round2($totalDescuentos);
+        $totalIva = $this->round2($totalIva);
+
         return [
-            'subtotal'         => round($subtotal, 2),
-            'total_descuentos' => round($totalDescuentos, 2),
-            'total_iva'        => round($totalIva, 2),
-            'total'            => round($subtotal - $totalDescuentos + $totalIva, 2),
+            'subtotal'         => $subtotal,
+            'total_descuentos' => $totalDescuentos,
+            'total_iva'        => $totalIva,
+            'total'            => $this->round2($subtotal - $totalDescuentos + $totalIva),
         ];
+    }
+
+    // ================== VALIDACIONES ==================
+
+    private function validarLinea(
+        ?int $itemId,
+        string $descripcion,
+        int $cantidad,
+        float $valorUnitario,
+        float $descuento,
+        float $ivaPct
+    ): void {
+
+        if (! $itemId || $itemId <= 0) {
+            throw new HttpException(422, 'Cada línea debe tener un item_id válido.');
+        }
+
+        // 🔥 NUEVA VALIDACIÓN (PUNTO 4)
+        $item = Item::find($itemId);
+
+        if (! $item) {
+            throw new HttpException(422, "El ítem {$itemId} no existe.");
+        }
+
+        if ($descripcion === '') {
+            throw new HttpException(422, 'La descripción de cada línea es obligatoria.');
+        }
+
+        if ($cantidad < 1) {
+            throw new HttpException(422, 'La cantidad debe ser mayor o igual a 1.');
+        }
+
+        if ($valorUnitario < 0) {
+            throw new HttpException(422, 'El valor unitario no puede ser negativo.');
+        }
+
+        if ($descuento < 0) {
+            throw new HttpException(422, 'El descuento no puede ser negativo.');
+        }
+
+        if ($ivaPct < 0) {
+            throw new HttpException(422, 'El IVA no puede ser negativo.');
+        }
+    }
+
+    // ================== HELPERS ==================
+
+    private function round2(float $value): float
+    {
+        return round($value, 2);
+    }
+
+    private function toFloat($value): float
+    {
+        return (float) $value;
+    }
+
+    private function toInt($value): int
+    {
+        return (int) $value;
     }
 }

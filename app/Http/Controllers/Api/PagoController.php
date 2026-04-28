@@ -16,25 +16,37 @@ class PagoController extends Controller
     // GET /api/pagos
     public function index(Request $request): JsonResponse
     {
+        $filters = [
+            'search' => $request->query('search'),
+            'desde'  => $request->query('desde'),
+            'hasta'  => $request->query('hasta'),
+        ];
+
+        $perPage = (int) $request->query('per_page', 20);
+
         return response()->json(
-            $this->pagoService->listar($request->empresa_id_ctx)
+            $this->pagoService->listar(
+                $request->empresa_id_ctx,
+                $filters,
+                $perPage
+            )
         );
     }
 
     // GET /api/pagos/{id}
     public function show(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->pagoService->obtener($id, $request->empresa_id_ctx)
-        );
+        return response()->json([
+            'pago' => $this->pagoService->obtener($id, $request->empresa_id_ctx)
+        ]);
     }
 
     // GET /api/facturas/{id}/pagos
-    public function porFactura(int $id): JsonResponse
+    public function porFactura(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->pagoService->pagosPorFactura($id)
-        );
+        return response()->json([
+            'pagos' => $this->pagoService->pagosPorFactura($id, $request->empresa_id_ctx)
+        ]);
     }
 
     // POST /api/pagos
@@ -50,21 +62,26 @@ class PagoController extends Controller
             'notas'       => ['nullable', 'string'],
         ]);
 
-        return response()->json(
-            $this->pagoService->registrar(
-                $data,
-                $request->empresa_id_ctx,
-                $request->user()->id,
-            ),
-            201
+        $pago = $this->pagoService->registrar(
+            $data,
+            $request->empresa_id_ctx,
+            $request->user()->id,
         );
+
+        return response()->json([
+            'message' => 'Pago registrado correctamente.',
+            'pago'    => $pago,
+        ], 201);
     }
 
     // POST /api/pagos/{id}/anular
     public function anular(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->pagoService->anular($id, $request->empresa_id_ctx)
-        );
+        $pago = $this->pagoService->anular($id, $request->empresa_id_ctx);
+
+        return response()->json([
+            'message' => 'Pago anulado correctamente.',
+            'pago'    => $pago,
+        ]);
     }
 }

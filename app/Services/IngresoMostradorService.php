@@ -3,14 +3,14 @@
 namespace App\Services;
 
 use App\Models\IngresoMostrador;
-use App\Repositories\Contracts\IngresoMostradorRepositoryInterface;
+use App\Repositories\IngresoMostradorRepository;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class IngresoMostradorService
 {
     public function __construct(
-        private readonly IngresoMostradorRepositoryInterface $ingresoMostradorRepository,
+        private readonly IngresoMostradorRepository $ingresoMostradorRepository,
         private readonly NumeracionService                   $numeracionService,
     ) {}
 
@@ -68,3 +68,4 @@ class IngresoMostradorService
         return $this->ingresoMostradorRepository->anular($id, $empresaId, $usuarioId);
     }
 }
+

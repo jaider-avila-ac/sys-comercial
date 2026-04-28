@@ -13,15 +13,31 @@ class ItemController extends Controller
         private readonly ItemService $itemService,
     ) {}
 
-    // GET /api/items
     public function index(Request $request): JsonResponse
     {
-        return response()->json(
-            $this->itemService->listar($request->empresa_id_ctx)
+        $perPage = (int) $request->get('per_page', 15);
+
+        $filters = [
+            'search'               => $request->get('search'),
+            'tipo'                 => $request->get('tipo'),
+            'controla_inventario'  => $request->has('controla_inventario')
+                ? filter_var($request->get('controla_inventario'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+                : null,
+        ];
+
+        $filters = array_filter($filters, static function ($value) {
+            return $value !== null && $value !== '';
+        });
+
+        $items = $this->itemService->paginar(
+            $request->empresa_id_ctx,
+            $perPage,
+            $filters
         );
+
+        return response()->json($items);
     }
 
-    // GET /api/items/{id}
     public function show(Request $request, int $id): JsonResponse
     {
         return response()->json(
@@ -29,7 +45,6 @@ class ItemController extends Controller
         );
     }
 
-    // POST /api/items
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -38,19 +53,31 @@ class ItemController extends Controller
             'descripcion'           => ['nullable', 'string'],
             'precio_compra'         => ['nullable', 'numeric', 'min:0'],
             'precio_venta_sugerido' => ['nullable', 'numeric', 'min:0'],
-            'controla_inventario'   => ['boolean'],
+            'controla_inventario'   => ['nullable', 'boolean'],
             'unidad'                => ['nullable', 'string', 'max:30'],
             'proveedor_id'          => ['nullable', 'integer'],
             'unidades_minimas'      => ['nullable', 'integer', 'min:0'],
+            'cantidad_inicial'      => ['nullable', 'integer', 'min:0'],
+            'fecha'                 => ['nullable', 'date'],
+            'condicion_pago'        => ['nullable', 'in:CONTADO,CREDITO,LIBRE'],
+            'fecha_vencimiento'     => ['nullable', 'date', 'after_or_equal:fecha'],
+            'abono_inicial'         => ['nullable', 'numeric', 'min:0'],
+            'medio_pago'            => ['nullable', 'string', 'max:50'],
+            'impuestos'             => ['nullable', 'numeric', 'min:0'],
+            'notas'                 => ['nullable', 'string'],
+            'is_activo'             => ['nullable', 'boolean'],
         ]);
 
         return response()->json(
-            $this->itemService->crear($data, $request->empresa_id_ctx),
+            $this->itemService->crear(
+                $data,
+                $request->empresa_id_ctx,
+                $request->user()->id,
+            ),
             201
         );
     }
 
-    // PUT /api/items/{id}
     public function update(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
@@ -63,6 +90,7 @@ class ItemController extends Controller
             'unidad'                => ['sometimes', 'nullable', 'string', 'max:30'],
             'proveedor_id'          => ['sometimes', 'nullable', 'integer'],
             'unidades_minimas'      => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'is_activo'             => ['sometimes', 'boolean'],
         ]);
 
         return response()->json(
@@ -70,7 +98,6 @@ class ItemController extends Controller
         );
     }
 
-    // PATCH /api/items/{id}/toggle
     public function toggle(Request $request, int $id): JsonResponse
     {
         return response()->json(
@@ -78,10 +105,12 @@ class ItemController extends Controller
         );
     }
 
-    // DELETE /api/items/{id}
     public function destroy(Request $request, int $id): JsonResponse
     {
         $this->itemService->eliminar($id, $request->empresa_id_ctx);
-        return response()->json(['message' => 'Ítem eliminado correctamente.']);
+
+        return response()->json([
+            'message' => 'Ítem eliminado correctamente.',
+        ]);
     }
 }

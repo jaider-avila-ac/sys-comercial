@@ -4,12 +4,35 @@ namespace App\Repositories;
 
 use App\Models\Cotizacion;
 use App\Models\CotizacionLinea;
-use App\Repositories\Contracts\CotizacionRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class CotizacionRepository implements CotizacionRepositoryInterface
+class CotizacionRepository
 {
+    public function paginate(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
+    {
+        $search    = $filters['search']    ?? '';
+        $estado    = $filters['estado']    ?? null;
+        $clienteId = $filters['cliente_id'] ?? null;
+        $desde     = $filters['desde']     ?? null;
+        $hasta     = $filters['hasta']     ?? null;
+
+        return Cotizacion::where('empresa_id', $empresaId)
+            ->with(['cliente', 'usuario'])
+            ->when($search, fn($q) => $q->where(fn($q) =>
+                $q->where('numero', 'like', "%{$search}%")
+                  ->orWhereHas('cliente', fn($q) =>
+                        $q->where('nombre_razon_social', 'like', "%{$search}%"))
+            ))
+            ->when($estado,    fn($q) => $q->where('estado',     $estado))
+            ->when($clienteId, fn($q) => $q->where('cliente_id', $clienteId))
+            ->when($desde,     fn($q) => $q->whereDate('fecha',  '>=', $desde))
+            ->when($hasta,     fn($q) => $q->whereDate('fecha',  '<=', $hasta))
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
+    }
+
     public function allByEmpresa(int $empresaId): Collection
     {
         return Cotizacion::where('empresa_id', $empresaId)
@@ -57,18 +80,9 @@ class CotizacionRepository implements CotizacionRepositoryInterface
         });
     }
 
-    // ── Privado ───────────────────────────────────────────────────────────────
-
     private function sincronizarLineas(int $cotizacionId, array $lineas): void
     {
-        // Eliminar líneas anteriores y reemplazar — más simple y seguro
         CotizacionLinea::where('cotizacion_id', $cotizacionId)->delete();
-
-        $registros = array_map(fn($l) => [
-            ...$l,
-            'cotizacion_id' => $cotizacionId,
-        ], $lineas);
-
-        CotizacionLinea::insert($registros);
+        CotizacionLinea::insert(array_map(fn($l) => [...$l, 'cotizacion_id' => $cotizacionId], $lineas));
     }
 }

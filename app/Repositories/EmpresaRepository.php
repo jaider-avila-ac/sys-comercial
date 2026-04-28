@@ -3,10 +3,9 @@
 namespace App\Repositories;
 
 use App\Models\Empresa;
-use App\Repositories\Contracts\EmpresaRepositoryInterface;
 use Illuminate\Support\Collection;
 
-class EmpresaRepository implements EmpresaRepositoryInterface
+class EmpresaRepository
 {
     public function all(): Collection
     {
@@ -27,6 +26,7 @@ class EmpresaRepository implements EmpresaRepositoryInterface
     {
         $empresa = Empresa::findOrFail($id);
         $empresa->update($data);
+
         return $empresa->fresh();
     }
 

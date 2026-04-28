@@ -3,11 +3,10 @@
 namespace App\Repositories;
 
 use App\Models\Numeracion;
-use App\Repositories\Contracts\NumeracionRepositoryInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class NumeracionRepository implements NumeracionRepositoryInterface
+class NumeracionRepository
 {
     public function findByEmpresaYTipo(int $empresaId, string $tipo): ?Numeracion
     {
@@ -23,30 +22,23 @@ class NumeracionRepository implements NumeracionRepositoryInterface
             ->get();
     }
 
-    /**
-     * Crea los 6 registros de numeración para una empresa nueva.
-     * Cada empresa empieza desde consecutivo = 0, independiente de las demás.
-     */
     public function crearParaEmpresa(int $empresaId): void
     {
         $ahora = now();
 
         $registros = array_map(fn($tipo) => [
-            'empresa_id'   => $empresaId,
-            'tipo'         => $tipo,
-            'prefijo'      => Numeracion::PREFIJOS_DEFAULT[$tipo],
-            'consecutivo'  => 0,
-            'relleno'      => 5,
-            'updated_at'   => $ahora,
+            'empresa_id'  => $empresaId,
+            'tipo'        => $tipo,
+            'prefijo'     => Numeracion::PREFIJOS_DEFAULT[$tipo],
+            'consecutivo' => 0,
+            'relleno'     => 5,
+            'created_at'  => $ahora,
+            'updated_at'  => $ahora,
         ], Numeracion::TIPOS);
 
         Numeracion::insert($registros);
     }
 
-    /**
-     * Incrementa el consecutivo de forma atómica y retorna el número formateado.
-     * Usa DB::transaction + lockForUpdate para evitar duplicados en concurrencia.
-     */
     public function incrementar(int $empresaId, string $tipo): string
     {
         return DB::transaction(function () use ($empresaId, $tipo) {
@@ -62,8 +54,7 @@ class NumeracionRepository implements NumeracionRepositoryInterface
                 'updated_at'  => now(),
             ]);
 
-            // Formatear: prefijo + consecutivo con relleno de ceros
-            $numero = str_pad($siguiente, $numeracion->relleno, '0', STR_PAD_LEFT);
+            $numero = str_pad((string) $siguiente, $numeracion->relleno, '0', STR_PAD_LEFT);
 
             return "{$numeracion->prefijo}-{$numero}";
         });
@@ -75,7 +66,10 @@ class NumeracionRepository implements NumeracionRepositoryInterface
             ->where('tipo', $tipo)
             ->firstOrFail();
 
-        $numeracion->update([...$data, 'updated_at' => now()]);
+        $numeracion->update([
+            ...$data,
+            'updated_at' => now(),
+        ]);
 
         return $numeracion->fresh();
     }

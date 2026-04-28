@@ -4,12 +4,27 @@ namespace App\Repositories;
 
 use App\Models\CajaMovimiento;
 use App\Models\EgresoCompra;
-use App\Repositories\Contracts\EgresoCompraRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class EgresoCompraRepository implements EgresoCompraRepositoryInterface
+class EgresoCompraRepository
 {
+    public function paginate(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
+    {
+        $search = $filters['search'] ?? '';
+        $desde  = $filters['desde']  ?? null;
+        $hasta  = $filters['hasta']  ?? null;
+
+        return EgresoCompra::where('empresa_id', $empresaId)
+            ->with(['usuario', 'compra'])
+            ->when($search, fn($q) => $q->where('descripcion', 'like', "%{$search}%"))
+            ->when($desde,  fn($q) => $q->whereDate('fecha', '>=', $desde))
+            ->when($hasta,  fn($q) => $q->whereDate('fecha', '<=', $hasta))
+            ->orderByDesc('fecha')
+            ->paginate($perPage);
+    }
+
     public function allByEmpresa(int $empresaId): Collection
     {
         return EgresoCompra::where('empresa_id', $empresaId)
@@ -35,7 +50,6 @@ class EgresoCompraRepository implements EgresoCompraRepositoryInterface
     public function registrar(array $data, int $empresaId, int $usuarioId): EgresoCompra
     {
         return DB::transaction(function () use ($data, $empresaId, $usuarioId) {
-
             $egreso = EgresoCompra::create([
                 ...$data,
                 'empresa_id' => $empresaId,
@@ -43,7 +57,6 @@ class EgresoCompraRepository implements EgresoCompraRepositoryInterface
                 'estado'     => 'ACTIVO',
             ]);
 
-            // Registrar en caja como egreso de compra
             CajaMovimiento::create([
                 'empresa_id'  => $empresaId,
                 'usuario_id'  => $usuarioId,
@@ -62,18 +75,14 @@ class EgresoCompraRepository implements EgresoCompraRepositoryInterface
     public function anular(int $id, int $empresaId): EgresoCompra
     {
         return DB::transaction(function () use ($id, $empresaId) {
+            $egreso = EgresoCompra::where('empresa_id', $empresaId)->findOrFail($id);
 
-            $egreso = EgresoCompra::where('empresa_id', $empresaId)
-                ->findOrFail($id);
-
-            // Eliminar movimiento de caja
             CajaMovimiento::where('origen_tipo', 'EGRESO_COMPRA')
                 ->where('origen_id', $id)
                 ->where('empresa_id', $empresaId)
                 ->delete();
 
             $egreso->update(['estado' => 'ANULADO']);
-
             return $egreso->fresh();
         });
     }

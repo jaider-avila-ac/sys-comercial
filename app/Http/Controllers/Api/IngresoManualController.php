@@ -13,15 +13,16 @@ class IngresoManualController extends Controller
         private readonly IngresoManualService $ingresoManualService,
     ) {}
 
-    // GET /api/ingresos/manuales
     public function index(Request $request): JsonResponse
     {
         return response()->json(
-            $this->ingresoManualService->listar($request->empresa_id_ctx)
+            $this->ingresoManualService->listar(
+                $request->empresa_id_ctx,
+                $request->only(['search', 'desde', 'hasta', 'estado'])
+            )
         );
     }
 
-    // GET /api/ingresos/manuales/{id}
     public function show(Request $request, int $id): JsonResponse
     {
         return response()->json(
@@ -29,14 +30,13 @@ class IngresoManualController extends Controller
         );
     }
 
-    // POST /api/ingresos/manuales
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'fecha'       => ['required', 'date'],
             'descripcion' => ['required', 'string', 'max:255'],
             'monto'       => ['required', 'numeric', 'min:0.01'],
             'notas'       => ['nullable', 'string'],
+            'archivo'     => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
         return response()->json(
@@ -49,7 +49,20 @@ class IngresoManualController extends Controller
         );
     }
 
-    // POST /api/ingresos/manuales/{id}/anular
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'descripcion' => ['sometimes', 'string', 'max:255'],
+            'monto'       => ['sometimes', 'numeric', 'min:0.01'],
+            'notas'       => ['nullable', 'string'],
+            'archivo'     => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
+        return response()->json(
+            $this->ingresoManualService->actualizar($id, $data, $request->empresa_id_ctx)
+        );
+    }
+
     public function anular(Request $request, int $id): JsonResponse
     {
         return response()->json(

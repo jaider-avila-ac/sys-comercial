@@ -29,30 +29,8 @@ use App\Observers\ItemObserver;
 use App\Observers\ProveedorObserver;
 use App\Observers\UsuarioObserver;
 use App\Repositories\Contracts\ClienteRepositoryInterface;
-use App\Repositories\Contracts\CotizacionRepositoryInterface;
-use App\Repositories\Contracts\EgresoCompraRepositoryInterface;
-use App\Repositories\Contracts\EgresoManualRepositoryInterface;
-use App\Repositories\Contracts\EmpresaRepositoryInterface;
-use App\Repositories\Contracts\FacturaRepositoryInterface;
-use App\Repositories\Contracts\IngresoManualRepositoryInterface;
-use App\Repositories\Contracts\IngresoMostradorRepositoryInterface;
-use App\Repositories\Contracts\ItemRepositoryInterface;
-use App\Repositories\Contracts\NumeracionRepositoryInterface;
-use App\Repositories\Contracts\PagoRepositoryInterface;
-use App\Repositories\Contracts\ProveedorRepositoryInterface;
 use App\Repositories\Contracts\UsuarioRepositoryInterface;
 use App\Repositories\ClienteRepository;
-use App\Repositories\CotizacionRepository;
-use App\Repositories\EgresoCompraRepository;
-use App\Repositories\EgresoManualRepository;
-use App\Repositories\EmpresaRepository;
-use App\Repositories\FacturaRepository;
-use App\Repositories\IngresoManualRepository;
-use App\Repositories\IngresoMostradorRepository;
-use App\Repositories\ItemRepository;
-use App\Repositories\NumeracionRepository;
-use App\Repositories\PagoRepository;
-use App\Repositories\ProveedorRepository;
 use App\Repositories\UsuarioRepository;
 use Illuminate\Support\ServiceProvider;
 
@@ -61,18 +39,11 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(UsuarioRepositoryInterface::class,          UsuarioRepository::class);
-        $this->app->bind(EmpresaRepositoryInterface::class,          EmpresaRepository::class);
+       
         $this->app->bind(ClienteRepositoryInterface::class,          ClienteRepository::class);
-        $this->app->bind(ItemRepositoryInterface::class,             ItemRepository::class);
-        $this->app->bind(NumeracionRepositoryInterface::class,       NumeracionRepository::class);
-        $this->app->bind(ProveedorRepositoryInterface::class,        ProveedorRepository::class);
-        $this->app->bind(CotizacionRepositoryInterface::class,       CotizacionRepository::class);
-        $this->app->bind(FacturaRepositoryInterface::class,          FacturaRepository::class);
-        $this->app->bind(PagoRepositoryInterface::class,             PagoRepository::class);
-        $this->app->bind(EgresoManualRepositoryInterface::class,     EgresoManualRepository::class);
-        $this->app->bind(EgresoCompraRepositoryInterface::class,     EgresoCompraRepository::class);
-        $this->app->bind(IngresoManualRepositoryInterface::class,    IngresoManualRepository::class);
-        $this->app->bind(IngresoMostradorRepositoryInterface::class, IngresoMostradorRepository::class);
+    
+      
+     
     }
 
     public function boot(): void

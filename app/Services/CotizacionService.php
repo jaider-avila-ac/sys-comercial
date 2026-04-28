@@ -3,14 +3,14 @@
 namespace App\Services;
 
 use App\Models\Cotizacion;
-use App\Repositories\Contracts\CotizacionRepositoryInterface;
+use App\Repositories\CotizacionRepository;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class CotizacionService
 {
     public function __construct(
-        private readonly CotizacionRepositoryInterface $cotizacionRepository,
+        private readonly CotizacionRepository $cotizacionRepository,
         private readonly LineaCalculoService           $calculoService,
         private readonly NumeracionService             $numeracionService,
     ) {}

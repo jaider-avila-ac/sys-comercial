@@ -3,19 +3,19 @@
 namespace App\Services;
 
 use App\Models\IngresoManual;
-use App\Repositories\Contracts\IngresoManualRepositoryInterface;
-use Illuminate\Support\Collection;
+use App\Repositories\IngresoManualRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class IngresoManualService
 {
     public function __construct(
-        private readonly IngresoManualRepositoryInterface $ingresoManualRepository,
+        private readonly IngresoManualRepository $ingresoManualRepository,
     ) {}
 
-    public function listar(int $empresaId): Collection
+    public function listar(int $empresaId, array $filters = []): LengthAwarePaginator
     {
-        return $this->ingresoManualRepository->allByEmpresa($empresaId);
+        return $this->ingresoManualRepository->paginate($empresaId, $filters);
     }
 
     public function obtener(int $id, int $empresaId): IngresoManual
@@ -34,12 +34,19 @@ class IngresoManualService
         return $this->ingresoManualRepository->registrar($data, $empresaId, $usuarioId);
     }
 
+    public function actualizar(int $id, array $data, int $empresaId): IngresoManual
+    {
+        $this->obtener($id, $empresaId);
+
+        return $this->ingresoManualRepository->actualizar($id, $data, $empresaId);
+    }
+
     public function anular(int $id, int $empresaId): IngresoManual
     {
         $ingreso = $this->obtener($id, $empresaId);
 
         if ($ingreso->estado === 'ANULADO') {
-            throw new HttpException(409, 'El ingreso ya está anulado.');
+            throw new HttpException(422, 'El ingreso ya está anulado.');
         }
 
         return $this->ingresoManualRepository->anular($id, $empresaId);

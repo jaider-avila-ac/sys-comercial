@@ -115,12 +115,14 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
         Route::post('/{id}/anular', [PagoController::class, 'anular']);
     });
 
-    Route::prefix('egresos/manuales')->group(function () {
-        Route::get('/',             [EgresoManualController::class, 'index']);
-        Route::post('/',            [EgresoManualController::class, 'store']);
-        Route::get('/{id}',         [EgresoManualController::class, 'show']);
-        Route::post('/{id}/anular', [EgresoManualController::class, 'anular']);
-    });
+   Route::prefix('egresos/manuales')->group(function () {
+    Route::get('/',             [EgresoManualController::class, 'index']);
+    Route::post('/',            [EgresoManualController::class, 'store']);
+    Route::get('/{id}',         [EgresoManualController::class, 'show']);
+    Route::put('/{id}',         [EgresoManualController::class, 'update']);   // ✅ nuevo
+    Route::delete('/{id}',      [EgresoManualController::class, 'destroy']);  // ✅ nuevo
+    Route::post('/{id}/anular', [EgresoManualController::class, 'anular']);
+});
 
     Route::prefix('egresos/compras')->group(function () {
         Route::get('/',             [EgresoCompraController::class, 'index']);
@@ -132,11 +134,13 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
     
 
     Route::prefix('ingresos/manuales')->group(function () {
-        Route::get('/',             [IngresoManualController::class, 'index']);
-        Route::post('/',            [IngresoManualController::class, 'store']);
-        Route::get('/{id}',         [IngresoManualController::class, 'show']);
-        Route::post('/{id}/anular', [IngresoManualController::class, 'anular']);
-    });
+    Route::get('/',             [IngresoManualController::class, 'index']);
+    Route::post('/',            [IngresoManualController::class, 'store']);
+    Route::get('/{id}',         [IngresoManualController::class, 'show']);
+    Route::put('/{id}',         [IngresoManualController::class, 'update']);   
+    Route::delete('/{id}',      [IngresoManualController::class, 'destroy']);  
+    Route::post('/{id}/anular', [IngresoManualController::class, 'anular']);
+});
 
     Route::prefix('ingresos/mostrador')->group(function () {
         Route::get('/',             [IngresoMostradorController::class, 'index']);

@@ -5,16 +5,6 @@ namespace App\Services;
 use App\Models\EmpresaResumen;
 use Illuminate\Support\Facades\DB;
 
-/**
- * ResumenService
- *
- * Recalcula y persiste la fila de empresa_resumen para una empresa.
- * Se llama desde los observers — nunca desde controladores directamente.
- * Un solo método público: recalcular(int $empresaId).
- *
- * La tabla empresa_resumen actúa como caché contable:
- * el dashboard y el SUPER_ADMIN leen de aquí sin tocar ninguna otra tabla.
- */
 class ResumenService
 {
     public function recalcular(int $empresaId): void
@@ -26,8 +16,6 @@ class ResumenService
             $data
         );
     }
-
-    // ── Privado ───────────────────────────────────────────────────────────────
 
     private function calcular(int $empresaId): array
     {
@@ -61,7 +49,7 @@ class ResumenService
 
         $totalesFacturas = DB::table('facturas')
             ->where('empresa_id', $empresaId)
-            ->whereIn('estado', ['EMITIDA'])
+            ->where('estado', 'EMITIDA')
             ->selectRaw('
                 COALESCE(SUM(total), 0)        as total_facturado,
                 COALESCE(SUM(total_pagado), 0) as total_pagado,
@@ -69,7 +57,7 @@ class ResumenService
             ')
             ->first();
 
-        // ── Ingresos en caja (solo ACTIVO) ────────────────────────────────────
+        // ── Ingresos que sí entran a caja directa ────────────────────────────
         $ingresosFacturas = DB::table('caja_movimientos')
             ->where('empresa_id', $empresaId)
             ->where('origen_tipo', 'INGRESO_PAGO')
@@ -80,28 +68,31 @@ class ResumenService
             ->where('origen_tipo', 'INGRESO_MOSTRADOR')
             ->sum('monto');
 
-        $ingresosManuales = DB::table('caja_movimientos')
+        // ── Ingresos manuales reales (solo activos) ──────────────────────────
+        $ingresosManuales = DB::table('ingresos_manuales')
             ->where('empresa_id', $empresaId)
-            ->where('origen_tipo', 'INGRESO_MANUAL')
+            ->where('estado', 'ACTIVO')
             ->sum('monto');
 
-        $totalEnCaja = $ingresosFacturas + $ingresosMostrador + $ingresosManuales;
+        // ── Total en caja = facturas + mostrador ─────────────────────────────
+        $totalEnCaja = $ingresosFacturas + $ingresosMostrador;
 
-        // ── Egresos en caja ───────────────────────────────────────────────────
+        // ── Egresos de compras ────────────────────────────────────────────────
         $egresosCompras = DB::table('caja_movimientos')
             ->where('empresa_id', $empresaId)
             ->where('origen_tipo', 'EGRESO_COMPRA')
             ->sum('monto');
 
-        $egresosManuales = DB::table('caja_movimientos')
+        // ── Egresos manuales reales (solo activos) ───────────────────────────
+        $egresosManuales = DB::table('egresos_manuales')
             ->where('empresa_id', $empresaId)
-            ->where('origen_tipo', 'EGRESO_MANUAL')
+            ->where('estado', 'ACTIVO')
             ->sum('monto');
 
         $totalEgresos = $egresosCompras + $egresosManuales;
 
-        // ── Balance real ──────────────────────────────────────────────────────
-        $balanceReal = $totalEnCaja - $totalEgresos;
+        // ── Balance real = caja + ingresos manuales − egresos ───────────────
+        $balanceReal = $totalEnCaja + $ingresosManuales - $totalEgresos;
 
         return [
             'empresa_id'           => $empresaId,
@@ -110,9 +101,9 @@ class ResumenService
             'cotizaciones_activas' => $cotizacionesActivas,
             'facturas_borrador'    => $facturasBorrador,
             'facturas_emitidas'    => $facturasEmitidas,
-            'total_facturado'      => round((float) $totalesFacturas->total_facturado, 2),
-            'total_pagado'         => round((float) $totalesFacturas->total_pagado, 2),
-            'saldo_pendiente'      => round((float) $totalesFacturas->saldo_pendiente, 2),
+            'total_facturado'      => round((float) ($totalesFacturas->total_facturado ?? 0), 2),
+            'total_pagado'         => round((float) ($totalesFacturas->total_pagado ?? 0), 2),
+            'saldo_pendiente'      => round((float) ($totalesFacturas->saldo_pendiente ?? 0), 2),
             'ingresos_facturas'    => round((float) $ingresosFacturas, 2),
             'ingresos_mostrador'   => round((float) $ingresosMostrador, 2),
             'ingresos_manuales'    => round((float) $ingresosManuales, 2),

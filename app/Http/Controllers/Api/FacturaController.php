@@ -13,23 +13,30 @@ class FacturaController extends Controller
         private readonly FacturaService $facturaService,
     ) {}
 
-    // GET /api/facturas
     public function index(Request $request): JsonResponse
     {
+        $filters = [
+            'search'     => $request->query('search'),
+            'estado'     => $request->query('estado'),
+            'cliente_id' => $request->query('cliente_id'),
+            'desde'      => $request->query('desde'),
+            'hasta'      => $request->query('hasta'),
+        ];
+
+        $perPage = (int) $request->query('per_page', 20);
+
         return response()->json(
-            $this->facturaService->listar($request->empresa_id_ctx)
+            $this->facturaService->listar($request->empresa_id_ctx, $filters, $perPage)
         );
     }
 
-    // GET /api/facturas/{id}
     public function show(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->facturaService->obtener($id, $request->empresa_id_ctx)
-        );
+        return response()->json([
+            'factura' => $this->facturaService->obtener($id, $request->empresa_id_ctx)
+        ]);
     }
 
-    // POST /api/facturas
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -38,25 +45,27 @@ class FacturaController extends Controller
             'fecha'         => ['required', 'date'],
             'notas'         => ['nullable', 'string'],
             'lineas'        => ['required', 'array', 'min:1'],
-            'lineas.*.item_id'            => ['nullable', 'integer'],
-            'lineas.*.descripcion_manual' => ['nullable', 'string', 'max:255'],
+
+            'lineas.*.item_id'            => ['required', 'integer'],
+            'lineas.*.descripcion_manual' => ['required', 'string', 'max:255'],
             'lineas.*.cantidad'           => ['required', 'integer', 'min:1'],
             'lineas.*.valor_unitario'     => ['required', 'numeric', 'min:0'],
             'lineas.*.descuento'          => ['nullable', 'numeric', 'min:0'],
             'lineas.*.iva_pct'            => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        return response()->json(
-            $this->facturaService->crear(
-                $data,
-                $request->empresa_id_ctx,
-                $request->user()->id,
-            ),
-            201
+        $factura = $this->facturaService->crear(
+            $data,
+            $request->empresa_id_ctx,
+            $request->user()->id,
         );
+
+        return response()->json([
+            'message' => 'Factura creada correctamente.',
+            'factura' => $factura,
+        ], 201);
     }
 
-    // PUT /api/facturas/{id}
     public function update(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
@@ -64,56 +73,68 @@ class FacturaController extends Controller
             'fecha'         => ['sometimes', 'date'],
             'notas'         => ['nullable', 'string'],
             'lineas'        => ['sometimes', 'array', 'min:1'],
-            'lineas.*.item_id'            => ['nullable', 'integer'],
-            'lineas.*.descripcion_manual' => ['nullable', 'string', 'max:255'],
+
+            'lineas.*.item_id'            => ['required_with:lineas', 'integer'],
+            'lineas.*.descripcion_manual' => ['required_with:lineas', 'string', 'max:255'],
             'lineas.*.cantidad'           => ['required_with:lineas', 'integer', 'min:1'],
             'lineas.*.valor_unitario'     => ['required_with:lineas', 'numeric', 'min:0'],
             'lineas.*.descuento'          => ['nullable', 'numeric', 'min:0'],
             'lineas.*.iva_pct'            => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        return response()->json(
-            $this->facturaService->actualizar(
-                $id, $data,
-                $request->empresa_id_ctx,
-                $request->user()->id,
-            )
+        $factura = $this->facturaService->actualizar(
+            $id,
+            $data,
+            $request->empresa_id_ctx,
+            $request->user()->id,
         );
+
+        return response()->json([
+            'message' => 'Factura actualizada correctamente.',
+            'factura' => $factura,
+        ]);
     }
 
-    // POST /api/facturas/{id}/emitir
     public function emitir(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->facturaService->emitir($id, $request->empresa_id_ctx)
-        );
+        $factura = $this->facturaService->emitir($id, $request->empresa_id_ctx);
+
+        return response()->json([
+            'message' => 'Factura emitida correctamente.',
+            'factura' => $factura,
+        ]);
     }
 
-    // POST /api/facturas/{id}/anular
     public function anular(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->facturaService->anular($id, $request->empresa_id_ctx)
-        );
+        $factura = $this->facturaService->anular($id, $request->empresa_id_ctx);
+
+        return response()->json([
+            'message' => 'Factura anulada correctamente.',
+            'factura' => $factura,
+        ]);
     }
 
-    // POST /api/facturas/desde-cotizacion/{cotizacionId}
     public function desdeCotizacion(Request $request, int $cotizacionId): JsonResponse
     {
-        return response()->json(
-            $this->facturaService->convertirDesdeCotizacion(
-                $cotizacionId,
-                $request->empresa_id_ctx,
-                $request->user()->id,
-            ),
-            201
+        $factura = $this->facturaService->convertirDesdeCotizacion(
+            $cotizacionId,
+            $request->empresa_id_ctx,
+            $request->user()->id,
         );
+
+        return response()->json([
+            'message' => 'Factura creada desde cotización.',
+            'factura' => $factura,
+        ], 201);
     }
 
-    // DELETE /api/facturas/{id}
     public function destroy(Request $request, int $id): JsonResponse
     {
         $this->facturaService->eliminar($id, $request->empresa_id_ctx);
-        return response()->json(['message' => 'Factura eliminada correctamente.']);
+
+        return response()->json([
+            'message' => 'Factura eliminada correctamente.'
+        ]);
     }
 }

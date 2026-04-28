@@ -4,41 +4,46 @@ namespace App\Services;
 
 use App\Models\Factura;
 use App\Models\IngresoPago;
-use App\Repositories\Contracts\PagoRepositoryInterface;
+use App\Repositories\PagoRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PagoService
 {
     public function __construct(
-        private readonly PagoRepositoryInterface $pagoRepository,
-        private readonly NumeracionService       $numeracionService,
+        private readonly PagoRepository    $pagoRepository,
+        private readonly NumeracionService $numeracionService,
     ) {}
 
-    public function listar(int $empresaId): Collection
+    public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return $this->pagoRepository->allByEmpresa($empresaId);
+        return $this->pagoRepository->paginate($empresaId, $filters, $perPage);
     }
 
     public function obtener(int $id, int $empresaId): IngresoPago
     {
         $pago = $this->pagoRepository->findById($id);
 
-        if (! $pago || $pago->empresa_id !== $empresaId) {
+        if (! $pago || (int) $pago->empresa_id !== (int) $empresaId) {
             throw new HttpException(404, 'Pago no encontrado.');
         }
 
         return $pago;
     }
 
-    public function pagosPorFactura(int $facturaId): Collection
+    public function pagosPorFactura(int $facturaId, int $empresaId): Collection
     {
+        $factura = Factura::find($facturaId);
+
+        if (! $factura || (int) $factura->empresa_id !== (int) $empresaId) {
+            throw new HttpException(404, 'Factura no encontrada.');
+        }
+
         return $this->pagoRepository->allByFactura($facturaId);
     }
 
     /**
-     * Registrar un pago para UNA factura.
-     *
      * $data = [
      *   'factura_id'  => 1,
      *   'monto'       => 500000,
@@ -51,25 +56,30 @@ class PagoService
      */
     public function registrar(array $data, int $empresaId, int $usuarioId): IngresoPago
     {
-        $facturaId = (int)   $data['factura_id'];
-        $monto     = (float) $data['monto'];
+        $facturaId = (int) $data['factura_id'];
+        $monto     = round((float) $data['monto'], 2);
 
-        // Validar que la factura exista, pertenezca a la empresa y esté EMITIDA
         $factura = Factura::find($facturaId);
 
-        if (! $factura || $factura->empresa_id !== $empresaId) {
+        if (! $factura || (int) $factura->empresa_id !== (int) $empresaId) {
             throw new HttpException(404, 'Factura no encontrada.');
         }
 
         if ($factura->estado !== 'EMITIDA') {
-            throw new HttpException(409, "La factura {$factura->numero} no está en estado EMITIDA.");
+            throw new HttpException(409, 'Solo se pueden registrar pagos sobre facturas EMITIDAS.');
+        }
+
+        if ($monto <= 0) {
+            throw new HttpException(422, 'El monto del pago debe ser mayor a cero.');
         }
 
         if ($monto > (float) $factura->saldo) {
-            throw new HttpException(409, "El monto ($monto) supera el saldo pendiente de la factura ({$factura->saldo}).");
+            throw new HttpException(
+                409,
+                "El monto del pago ({$monto}) supera el saldo pendiente de la factura ({$factura->saldo})."
+            );
         }
 
-        // Generar número consecutivo REC
         $numero = $this->numeracionService->siguienteNumero($empresaId, 'REC');
 
         $cabecera = [
@@ -79,13 +89,19 @@ class PagoService
             'fecha'       => $data['fecha'],
             'descripcion' => $data['descripcion'] ?? "Pago {$numero} - Factura {$factura->numero}",
             'monto'       => $monto,
-            'notas'       => $data['notas']      ?? null,
+            'notas'       => $data['notas'] ?? null,
             'forma_pago'  => $data['forma_pago'],
             'referencia'  => $data['referencia'] ?? null,
             'estado'      => 'ACTIVO',
         ];
 
-        return $this->pagoRepository->registrar($cabecera, $facturaId, $monto, $empresaId, $usuarioId);
+        return $this->pagoRepository->registrar(
+            $cabecera,
+            $facturaId,
+            $monto,
+            $empresaId,
+            $usuarioId
+        );
     }
 
     public function anular(int $id, int $empresaId): IngresoPago

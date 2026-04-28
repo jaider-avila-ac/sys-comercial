@@ -3,17 +3,23 @@
 namespace App\Services;
 
 use App\Models\Proveedor;
-use App\Repositories\Contracts\ProveedorRepositoryInterface;
+use App\Repositories\ProveedorRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ProveedorService
 {
     public function __construct(
-        private readonly ProveedorRepositoryInterface $proveedorRepository,
+        private readonly ProveedorRepository $proveedorRepository,
     ) {}
 
-    public function listar(int $empresaId): Collection
+    public function listar(int $empresaId, array $filters = []): LengthAwarePaginator
+    {
+        return $this->proveedorRepository->paginate($empresaId, $filters);
+    }
+
+    public function listarTodos(int $empresaId): Collection
     {
         return $this->proveedorRepository->allByEmpresa($empresaId);
     }
@@ -52,12 +58,7 @@ class ProveedorService
 
     public function eliminar(int $id, int $empresaId): void
     {
-        $proveedor = $this->obtener($id, $empresaId);
-
-        if ($proveedor->items()->exists()) {
-            throw new HttpException(409, 'No se puede eliminar un proveedor con ítems asociados.');
-        }
-
+        $this->obtener($id, $empresaId);
         $this->proveedorRepository->delete($id);
     }
 }

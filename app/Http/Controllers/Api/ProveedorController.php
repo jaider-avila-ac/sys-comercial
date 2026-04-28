@@ -17,16 +17,34 @@ class ProveedorController extends Controller
     public function index(Request $request): JsonResponse
     {
         return response()->json(
-            $this->proveedorService->listar($request->empresa_id_ctx)
+            $this->proveedorService->listar(
+                $request->empresa_id_ctx,
+                $request->only(['search', 'activos'])
+            )
         );
     }
 
     // GET /api/proveedores/{id}
     public function show(Request $request, int $id): JsonResponse
     {
-        return response()->json(
-            $this->proveedorService->obtener($id, $request->empresa_id_ctx)
-        );
+        $proveedor = $this->proveedorService->obtener($id, $request->empresa_id_ctx);
+
+        // Items del catálogo asignados a este proveedor
+        $items = $proveedor->items()->get();
+
+        // Resumen de compras
+        $compras = $proveedor->compras()->where('empresa_id', $request->empresa_id_ctx);
+        $resumen = [
+            'total_compras' => $compras->count(),
+            'monto_total'   => $compras->sum('total'),
+            'deuda_total'   => $compras->sum('saldo_pendiente'),
+        ];
+
+        return response()->json([
+            'proveedor'       => $proveedor,
+            'items'           => $items,
+            'resumen_compras' => $resumen,
+        ]);
     }
 
     // POST /api/proveedores
@@ -63,6 +81,7 @@ class ProveedorController extends Controller
             'ciudad'              => ['sometimes', 'nullable', 'string', 'max:80'],
             'tiempo_entrega_dias' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'notas'               => ['sometimes', 'nullable', 'string'],
+            'is_activo'           => ['sometimes', 'boolean'],
         ]);
 
         return response()->json(
