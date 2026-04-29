@@ -3,13 +3,14 @@
 namespace App\Services;
 
 use App\Models\Auditoria;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class AuditoriaService
 {
     /**
      * Registrar una acción en auditoría.
-     * Llamado desde observers y desde AuthService.
      */
     public function registrar(
         int    $empresaId,
@@ -32,21 +33,36 @@ class AuditoriaService
         ]);
     }
 
-    public function listarPorEmpresa(int $empresaId, int $limit = 200): Collection
+    public function listarPorEmpresa(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return Auditoria::where('empresa_id', $empresaId)
+        $accion = $filters['accion'] ?? null;
+        $desde = $filters['desde'] ?? null;
+        $hasta = $filters['hasta'] ?? null;
+
+        $query = Auditoria::where('empresa_id', $empresaId)
             ->with('usuario')
-            ->orderByDesc('ocurrido_en')
-            ->limit($limit)
-            ->get();
+            ->when($accion, fn($q) => $q->where('accion', $accion))
+            ->when($desde, fn($q) => $q->whereDate('ocurrido_en', '>=', $desde))
+            ->when($hasta, fn($q) => $q->whereDate('ocurrido_en', '<=', $hasta))
+            ->orderByDesc('ocurrido_en');
+
+        return $query->paginate($perPage);
     }
 
-    public function listarPorUsuario(int $usuarioId, int $empresaId): Collection
+    public function listarPorUsuario(int $usuarioId, int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return Auditoria::where('empresa_id', $empresaId)
+        $accion = $filters['accion'] ?? null;
+        $desde = $filters['desde'] ?? null;
+        $hasta = $filters['hasta'] ?? null;
+
+        $query = Auditoria::where('empresa_id', $empresaId)
             ->where('usuario_id', $usuarioId)
-            ->orderByDesc('ocurrido_en')
-            ->limit(100)
-            ->get();
+            ->with('usuario')
+            ->when($accion, fn($q) => $q->where('accion', $accion))
+            ->when($desde, fn($q) => $q->whereDate('ocurrido_en', '>=', $desde))
+            ->when($hasta, fn($q) => $q->whereDate('ocurrido_en', '<=', $hasta))
+            ->orderByDesc('ocurrido_en');
+
+        return $query->paginate($perPage);
     }
 }

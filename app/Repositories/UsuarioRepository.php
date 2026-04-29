@@ -3,11 +3,11 @@
 namespace App\Repositories;
 
 use App\Models\Usuario;
-use App\Repositories\Contracts\UsuarioRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
-class UsuarioRepository implements UsuarioRepositoryInterface
+class UsuarioRepository
 {
     // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +29,29 @@ class UsuarioRepository implements UsuarioRepositoryInterface
     }
 
     // ── Gestión ───────────────────────────────────────────────────────────────
+
+    public function paginate(int $empresaId, array $filters = [], int $perPage = 20, bool $esSuperAdmin = false): LengthAwarePaginator
+    {
+        $search = $filters['search'] ?? '';
+        $rol = $filters['rol'] ?? null;
+        $activo = $filters['activo'] ?? null;
+
+        $query = Usuario::with('empresa')
+            ->when(!$esSuperAdmin, function ($q) use ($empresaId) {
+                $q->where('empresa_id', $empresaId);
+            })
+            ->when($search, function ($q) use ($search) {
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('nombres', 'like', "%{$search}%")
+                        ->orWhere('apellidos', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->when($rol, fn($q) => $q->where('rol', $rol))
+            ->when($activo !== null && $activo !== '', fn($q) => $q->where('is_activo', $activo === '1'));
+
+        return $query->orderBy('nombres')->paginate($perPage);
+    }
 
     public function allByEmpresa(int $empresaId): Collection
     {

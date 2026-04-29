@@ -55,15 +55,18 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
     });
 
     Route::prefix('usuarios')->group(function () {
-        Route::get('/',                [UsuarioController::class, 'index']);
-        Route::post('/',               [UsuarioController::class, 'store']);
-        Route::get('/{id}',            [UsuarioController::class, 'show']);
-        Route::put('/{id}',            [UsuarioController::class, 'update']);
-        Route::patch('/{id}/toggle',   [UsuarioController::class, 'toggle']);
-        Route::patch('/{id}/password', [UsuarioController::class, 'changePassword']);
-        Route::get('/{id}/auditoria',  [AuditoriaController::class, 'porUsuario']);
-        Route::get('/{id}/sesiones',   [SesionController::class,    'porUsuario']);
-    });
+    Route::get('/',                [UsuarioController::class, 'index']);
+    Route::post('/',               [UsuarioController::class, 'store']);
+    // ✅ Las rutas fijas van PRIMERO
+    Route::get('/activos-ahora',   [UsuarioController::class, 'activosAhora']);
+    // ✅ Las rutas con {id} van al FINAL
+    Route::get('/{id}',            [UsuarioController::class, 'show']);
+    Route::put('/{id}',            [UsuarioController::class, 'update']);
+    Route::patch('/{id}/toggle',   [UsuarioController::class, 'toggle']);
+    Route::patch('/{id}/password', [UsuarioController::class, 'changePassword']);
+    Route::get('/{id}/auditoria',  [AuditoriaController::class, 'porUsuario']);
+    Route::get('/{id}/sesiones',   [SesionController::class,    'porUsuario']);
+});
 
     Route::prefix('reportes')->group(function () {
     Route::get('/financiero', [ReporteController::class, 'financiero']);

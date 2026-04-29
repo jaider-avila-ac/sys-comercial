@@ -16,19 +16,36 @@ class UsuarioController extends Controller
     // GET /api/usuarios
     public function index(Request $request): JsonResponse
     {
+        $filters = [
+            'search' => $request->query('search'),
+            'rol'    => $request->query('rol'),
+            'activo' => $request->query('activo'),
+        ];
+        
+        $perPage = (int) $request->query('per_page', 20);
+        
         return response()->json(
-            $this->usuarioService->listarPorEmpresa($request->empresa_id_ctx)
+            $this->usuarioService->listarPorEmpresa(
+                $request->empresa_id_ctx,
+                $filters,
+                $perPage,
+                $request->user()->esSuperAdmin()
+            )
         );
     }
 
     // GET /api/usuarios/{id}
-    public function show(Request $request, int $id): JsonResponse
+    public function show(Request $request, $id): JsonResponse  // ✅ Cambiar int a $id (sin tipo)
     {
-        return response()->json($this->usuarioService->obtener(
-            id:           $id,
-            empresaId:    $request->empresa_id_ctx,
-            esSuperAdmin: $request->user()->esSuperAdmin(),
-        ));
+        $usuarioId = (int) $id;  // ✅ Convertir a entero
+        
+        return response()->json([
+            'usuario' => $this->usuarioService->obtener(
+                id:           $usuarioId,
+                empresaId:    $request->empresa_id_ctx,
+                esSuperAdmin: $request->user()->esSuperAdmin(),
+            )
+        ]);
     }
 
     // POST /api/usuarios
@@ -42,15 +59,19 @@ class UsuarioController extends Controller
             'rol'       => ['required', 'in:EMPRESA_ADMIN,OPERATIVO'],
         ]);
 
-        return response()->json($this->usuarioService->crear(
-            data:      $data,
-            empresaId: $request->empresa_id_ctx,
-        ), 201);
+        return response()->json([
+            'usuario' => $this->usuarioService->crear(
+                data:      $data,
+                empresaId: $request->empresa_id_ctx,
+            )
+        ], 201);
     }
 
     // PUT /api/usuarios/{id}
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
+        $usuarioId = (int) $id;
+        
         $data = $request->validate([
             'nombres'   => ['sometimes', 'string', 'max:120'],
             'apellidos' => ['sometimes', 'string', 'max:120'],
@@ -58,38 +79,58 @@ class UsuarioController extends Controller
             'rol'       => ['sometimes', 'in:EMPRESA_ADMIN,OPERATIVO'],
         ]);
 
-        return response()->json($this->usuarioService->actualizar(
-            id:           $id,
-            data:         $data,
-            empresaId:    $request->empresa_id_ctx,
-            esSuperAdmin: $request->user()->esSuperAdmin(),
-        ));
+        return response()->json([
+            'usuario' => $this->usuarioService->actualizar(
+                id:           $usuarioId,
+                data:         $data,
+                empresaId:    $request->empresa_id_ctx,
+                esSuperAdmin: $request->user()->esSuperAdmin(),
+            )
+        ]);
     }
 
     // PATCH /api/usuarios/{id}/toggle
-    public function toggle(Request $request, int $id): JsonResponse
+    public function toggle(Request $request, $id): JsonResponse
     {
-        return response()->json($this->usuarioService->toggleActivo(
-            id:           $id,
-            empresaId:    $request->empresa_id_ctx,
-            esSuperAdmin: $request->user()->esSuperAdmin(),
-        ));
+        $usuarioId = (int) $id;
+        
+        return response()->json([
+            'usuario' => $this->usuarioService->toggleActivo(
+                id:           $usuarioId,
+                empresaId:    $request->empresa_id_ctx,
+                esSuperAdmin: $request->user()->esSuperAdmin(),
+            )
+        ]);
     }
 
     // PATCH /api/usuarios/{id}/password
-    public function changePassword(Request $request, int $id): JsonResponse
+    public function changePassword(Request $request, $id): JsonResponse
     {
+        $usuarioId = (int) $id;
+        
         $data = $request->validate([
             'password' => ['required', 'string', 'min:8'],
         ]);
 
         $this->usuarioService->cambiarPassword(
-            id:            $id,
+            id:            $usuarioId,
             nuevaPassword: $data['password'],
             empresaId:     $request->empresa_id_ctx,
             esSuperAdmin:  $request->user()->esSuperAdmin(),
         );
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);
+    }
+    
+    // GET /api/usuarios/activos-ahora
+    public function activosAhora(Request $request): JsonResponse
+    {
+        $minutos = (int) $request->query('minutos', 30);
+        
+        $usuarios = $this->usuarioService->usuariosActivosAhora($minutos, $request->empresa_id_ctx);
+        
+        return response()->json([
+            'data' => $usuarios
+        ]);
     }
 }

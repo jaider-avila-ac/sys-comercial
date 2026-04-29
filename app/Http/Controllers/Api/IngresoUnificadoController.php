@@ -21,11 +21,14 @@ class IngresoUnificadoController extends Controller
     {
         $filters = [
             'search' => $request->query('search'),
+            'tipo'   => $request->query('tipo'),
             'desde'  => $request->query('desde'),
             'hasta'  => $request->query('hasta'),
         ];
 
         $perPage = (int) $request->query('per_page', 20);
+
+        $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
 
         return response()->json(
             $this->ingresoUnificadoService->listar(

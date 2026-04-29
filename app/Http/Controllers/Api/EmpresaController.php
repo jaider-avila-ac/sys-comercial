@@ -14,9 +14,14 @@ class EmpresaController extends Controller
     ) {}
 
     // GET /api/empresas
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        return response()->json($this->empresaService->listar());
+        $search = $request->query('search', '');
+        $perPage = (int) $request->query('per_page', 20);
+        
+        $empresas = $this->empresaService->listar($search, $perPage);
+        
+        return response()->json($empresas);
     }
 
     // GET /api/empresa/me
@@ -24,7 +29,6 @@ class EmpresaController extends Controller
     {
         $empresa = $this->empresaService->obtener($request->empresa_id_ctx);
         
-        // ✅ Devolver en el formato que espera el frontend
         return response()->json([
             'empresa' => $empresa
         ]);
@@ -51,7 +55,11 @@ class EmpresaController extends Controller
             'direccion' => ['nullable', 'string', 'max:180'],
         ]);
 
-        return response()->json($this->empresaService->crear($data), 201);
+        $empresa = $this->empresaService->crear($data);
+        
+        return response()->json([
+            'empresa' => $empresa
+        ], 201);
     }
 
     // PUT /api/empresas/{id}

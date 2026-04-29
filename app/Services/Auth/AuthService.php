@@ -3,7 +3,7 @@
 namespace App\Services\Auth;
 
 use App\Models\Usuario;
-use App\Repositories\Contracts\UsuarioRepositoryInterface;
+use App\Repositories\UsuarioRepository;
 use App\Services\AuditoriaService;
 use App\Services\SesionService;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +18,7 @@ class AuthService
     private const CACHE_PREFIX      = 'auth_pretoken:';
 
     public function __construct(
-        private readonly UsuarioRepositoryInterface $usuarioRepository,
+        private readonly UsuarioRepository $usuarioRepository,
         private readonly AuditoriaService           $auditoriaService,
         private readonly SesionService              $sesionService,
     ) {}
@@ -43,7 +43,6 @@ class AuthService
             now()->addMinutes(self::TOKEN_TTL_MINUTES)
         );
 
-        // TODO: enviar por email vía Brevo
         return $preToken;
     }
 
@@ -63,7 +62,6 @@ class AuthService
         }
 
         if (! Hash::check($password, $usuario->password_hash)) {
-            // Registrar intento fallido
             $this->sesionService->registrarLoginFallido(
                 $usuario->empresa_id,
                 $usuario->id,
@@ -75,9 +73,11 @@ class AuthService
 
         Cache::forget($cacheKey);
 
-        $this->usuarioRepository->actualizarUltimoLogin($usuario->id);
+        // ✅ Actualizar last_login_at
+        $usuario->last_login_at = now();
+        $usuario->save();
 
-        // ── Registrar login exitoso ───────────────────────────────────────────
+        // ✅ Registrar sesión de login
         $this->sesionService->registrarLogin(
             $usuario,
             request()->ip() ?? '',
@@ -92,7 +92,6 @@ class AuthService
             entidadId:   $usuario->id,
             descripcion: "Login exitoso: {$usuario->email}",
         );
-        // ─────────────────────────────────────────────────────────────────────
 
         $accessToken = $usuario->createToken(
             name:      'access',
@@ -114,7 +113,6 @@ class AuthService
 
     public function cerrarSesion(Usuario $usuario): void
     {
-        // ── Registrar logout ──────────────────────────────────────────────────
         $this->sesionService->registrarLogout(
             $usuario,
             request()->ip() ?? '',
@@ -129,7 +127,6 @@ class AuthService
             entidadId:   $usuario->id,
             descripcion: "Logout: {$usuario->email}",
         );
-        // ─────────────────────────────────────────────────────────────────────
 
         /** @var PersonalAccessToken $token */
         $token = $usuario->currentAccessToken();

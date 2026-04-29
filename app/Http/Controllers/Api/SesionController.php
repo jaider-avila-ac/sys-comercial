@@ -13,30 +13,27 @@ class SesionController extends Controller
         private readonly SesionService $sesionService,
     ) {}
 
-    // GET /api/sesiones/activas
-    // Usuarios con token Sanctum vigente en la empresa
-    public function activas(Request $request): JsonResponse
+    // GET /api/usuarios/{id}/sesiones
+    public function porUsuario(Request $request, $id): JsonResponse
     {
+        $usuarioId = (int) $id;
+        
+        $filters = [
+            'desde' => $request->query('desde'),
+            'hasta' => $request->query('hasta'),
+        ];
+        
+        $perPage = (int) $request->query('per_page', 20);
+        
+        $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
+        
         return response()->json(
-            $this->sesionService->sesionesActivas($request->empresa_id_ctx)
-        );
-    }
-
-    // GET /api/sesiones/historial
-    // Historial de logins/logouts de la empresa
-    public function historial(Request $request): JsonResponse
-    {
-        return response()->json(
-            $this->sesionService->historialLogin($request->empresa_id_ctx)
-        );
-    }
-
-    // GET /api/sesiones/usuario/{id}
-    // Historial de un usuario específico
-    public function porUsuario(Request $request, int $id): JsonResponse
-    {
-        return response()->json(
-            $this->sesionService->historialPorUsuario($id, $request->empresa_id_ctx)
+            $this->sesionService->historialPorUsuario(
+                $usuarioId,
+                $request->empresa_id_ctx,
+                $filters,
+                $perPage
+            )
         );
     }
 }

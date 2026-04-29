@@ -3,20 +3,22 @@
 namespace App\Services;
 
 use App\Models\Usuario;
-use App\Repositories\Contracts\UsuarioRepositoryInterface;
-use Illuminate\Support\Collection;
+use App\Repositories\UsuarioRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Support\Carbon; 
+use Illuminate\Support\Collection;
 
 class UsuarioService
 {
     public function __construct(
-        private readonly UsuarioRepositoryInterface $usuarioRepository,
+        private readonly UsuarioRepository $usuarioRepository,
     ) {}
 
-    public function listarPorEmpresa(int $empresaId): Collection
+    public function listarPorEmpresa(int $empresaId, array $filters = [], int $perPage = 20, bool $esSuperAdmin = false): LengthAwarePaginator
     {
-        return $this->usuarioRepository->allByEmpresa($empresaId);
+        return $this->usuarioRepository->paginate($empresaId, $filters, $perPage, $esSuperAdmin);
     }
 
     public function obtener(int $id, int $empresaId, bool $esSuperAdmin = false): Usuario
@@ -27,7 +29,6 @@ class UsuarioService
             throw new HttpException(404, 'Usuario no encontrado.');
         }
 
-        // Verificar que el usuario pertenece a la empresa (excepto SUPER_ADMIN)
         if (! $esSuperAdmin && $usuario->empresa_id !== $empresaId) {
             throw new HttpException(403, 'No tienes acceso a este usuario.');
         }
@@ -37,7 +38,6 @@ class UsuarioService
 
     public function crear(array $data, int $empresaId): Usuario
     {
-        // Verificar email único dentro de la empresa
         $existe = $this->usuarioRepository->findByEmail($data['email']);
 
         if ($existe) {
@@ -54,7 +54,7 @@ class UsuarioService
 
     public function actualizar(int $id, array $data, int $empresaId, bool $esSuperAdmin = false): Usuario
     {
-        $this->obtener($id, $empresaId, $esSuperAdmin); // valida acceso
+        $this->obtener($id, $empresaId, $esSuperAdmin);
 
         $payload = collect($data)->except(['password', 'empresa_id'])->toArray();
 
@@ -75,4 +75,14 @@ class UsuarioService
         $this->obtener($id, $empresaId, $esSuperAdmin);
         return $this->usuarioRepository->toggleActivo($id);
     }
+
+    public function usuariosActivosAhora(int $minutos, int $empresaId): Collection
+{
+    $limite = Carbon::now('America/Bogota')->subMinutes($minutos);
+    
+    return Usuario::where('empresa_id', $empresaId)
+        ->where('last_login_at', '>=', $limite)
+        ->orderBy('last_login_at', 'desc')
+        ->get();
+}
 }

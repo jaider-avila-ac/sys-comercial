@@ -16,31 +16,54 @@ class DashboardController extends Controller
     public function index(Request $request): JsonResponse
     {
         $empresaId = $request->empresa_id_ctx;
-        $resumen   = EmpresaResumen::find($empresaId);
+        
+        // ✅ Usar directamente la tabla empresa_resumen (sin recalcular)
+        $resumen = EmpresaResumen::find($empresaId);
 
         if (! $resumen) {
-            return response()->json(['message' => 'Sin datos aún.'], 404);
+            return response()->json(['message' => 'Sin datos aún. El sistema está generando el resumen.'], 404);
         }
 
-        // Actividad reciente — estas sí se consultan en tiempo real
-        // pero son solo los últimos 5 registros, muy baratos
+        // ✅ Incluir estado en las facturas
         $ultimasFacturas = Factura::where('empresa_id', $empresaId)
             ->where('estado', 'EMITIDA')
             ->with('cliente')
-            ->orderByDesc('created_at')
+            ->orderByDesc('fecha')
             ->limit(5)
-            ->get(['id', 'numero', 'cliente_id', 'total', 'saldo', 'fecha']);
+            ->get(['id', 'numero', 'cliente_id', 'total', 'saldo', 'fecha', 'estado']);
 
+        // ✅ Incluir el cliente en los pagos (a través de la factura relacionada)
         $ultimosPagos = IngresoPago::where('empresa_id', $empresaId)
             ->where('estado', 'ACTIVO')
-            ->orderByDesc('created_at')
+            ->with(['aplicaciones.factura.cliente'])
+            ->orderByDesc('fecha')
             ->limit(5)
-            ->get(['id', 'numero', 'monto', 'forma_pago', 'fecha']);
+            ->get();
+
+        // Formatear pagos para incluir cliente
+        $pagosFormateados = $ultimosPagos->map(function ($pago) {
+            $clienteNombre = null;
+            foreach ($pago->aplicaciones as $aplicacion) {
+                if ($aplicacion->factura && $aplicacion->factura->cliente) {
+                    $clienteNombre = $aplicacion->factura->cliente->nombre_razon_social;
+                    break;
+                }
+            }
+            
+            return [
+                'id' => $pago->id,
+                'numero' => $pago->numero,
+                'fecha' => $pago->fecha,
+                'monto' => $pago->monto,
+                'forma_pago' => $pago->forma_pago,
+                'cliente_nombre' => $clienteNombre,
+            ];
+        });
 
         return response()->json([
             'resumen'          => $resumen,
             'ultimas_facturas' => $ultimasFacturas,
-            'ultimos_pagos'    => $ultimosPagos,
+            'ultimos_pagos'    => $pagosFormateados,
         ]);
     }
 

@@ -11,67 +11,92 @@ class IngresoUnificadoService
     public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
         $search = $filters['search'] ?? '';
+        $tipo   = $filters['tipo'] ?? ''; 
         $desde = $filters['desde'] ?? null;
         $hasta = $filters['hasta'] ?? null;
 
-        // 1. Pagos de facturas (con datos del cliente)
-        $pagos = DB::table('ingresos_pagos')
-            ->where('ingresos_pagos.empresa_id', $empresaId)
-            ->where('ingresos_pagos.estado', 'ACTIVO')
-            ->leftJoin('pago_aplicaciones', 'ingresos_pagos.id', '=', 'pago_aplicaciones.ingreso_pago_id')
-            ->leftJoin('facturas', 'pago_aplicaciones.factura_id', '=', 'facturas.id')
-            ->leftJoin('clientes', 'facturas.cliente_id', '=', 'clientes.id')
-            ->select(
-                DB::raw("CAST(ingresos_pagos.id AS CHAR) as id"),
-                'ingresos_pagos.numero as recibo',
-                'ingresos_pagos.fecha',
-                DB::raw("'PAGO_FACTURA' as tipo"),
-                'ingresos_pagos.monto',
-                'ingresos_pagos.forma_pago',
-                'ingresos_pagos.referencia',
-                'ingresos_pagos.notas',
-                'clientes.nombre_razon_social as cliente_nombre',
-                'ingresos_pagos.created_at as orden'
-            );
+        // Iniciar builder para la unión
+        $union = null;
 
-        // 2. Ventas mostrador
-        $mostrador = DB::table('ingresos_mostrador')
-            ->where('empresa_id', $empresaId)
-            ->where('estado', 'ACTIVO')
-            ->select(
-                DB::raw("CAST(id AS CHAR) as id"),
-                'numero as recibo',
-                'fecha',
-                DB::raw("'VENTA_MOSTRADOR' as tipo"),
-                'monto',
-                'forma_pago',
-                'referencia',
-                'notas',
-                DB::raw('NULL as cliente_nombre'),
-                'created_at as orden'
-            );
+        // 1. Pagos de facturas (con datos del cliente) - solo si no hay filtro tipo o tipo es PAGO_FACTURA
+        if (!$tipo || $tipo === 'PAGO_FACTURA') {
+            $pagos = DB::table('ingresos_pagos')
+                ->where('ingresos_pagos.empresa_id', $empresaId)
+                ->where('ingresos_pagos.estado', 'ACTIVO')
+                ->leftJoin('pago_aplicaciones', 'ingresos_pagos.id', '=', 'pago_aplicaciones.ingreso_pago_id')
+                ->leftJoin('facturas', 'pago_aplicaciones.factura_id', '=', 'facturas.id')
+                ->leftJoin('clientes', 'facturas.cliente_id', '=', 'clientes.id')
+                ->select(
+                    DB::raw("CAST(ingresos_pagos.id AS CHAR) as id"),
+                    'ingresos_pagos.numero as recibo',
+                    'ingresos_pagos.fecha',
+                    DB::raw("'PAGO_FACTURA' as tipo"),
+                    'ingresos_pagos.monto',
+                    'ingresos_pagos.forma_pago',
+                    'ingresos_pagos.referencia',
+                    'ingresos_pagos.notas',
+                    'clientes.nombre_razon_social as cliente_nombre',
+                    'ingresos_pagos.created_at as orden'
+                );
+            $union = $pagos;
+        }
 
-        // 3. Ingresos manuales
-        $manuales = DB::table('ingresos_manuales')
-            ->where('empresa_id', $empresaId)
-            ->where('estado', 'ACTIVO')
-            ->select(
-                DB::raw("CAST(id AS CHAR) as id"),
-                DB::raw("CONCAT('MAN-', id) as recibo"),
-                'fecha',
-                DB::raw("'INGRESO_MANUAL' as tipo"),
-                'monto',
-                DB::raw("'EFECTIVO' as forma_pago"),
-                DB::raw("NULL as referencia"),
-                'notas',
-                DB::raw('NULL as cliente_nombre'),
-                'created_at as orden'
-            );
+        // 2. Ventas mostrador - solo si no hay filtro tipo o tipo es VENTA_MOSTRADOR
+        if (!$tipo || $tipo === 'VENTA_MOSTRADOR') {
+            $mostrador = DB::table('ingresos_mostrador')
+                ->where('empresa_id', $empresaId)
+                ->where('estado', 'ACTIVO')
+                ->select(
+                    DB::raw("CAST(id AS CHAR) as id"),
+                    'numero as recibo',
+                    'fecha',
+                    DB::raw("'VENTA_MOSTRADOR' as tipo"),
+                    'monto',
+                    'forma_pago',
+                    'referencia',
+                    'notas',
+                    DB::raw('NULL as cliente_nombre'),
+                    'created_at as orden'
+                );
+            
+            if ($union === null) {
+                $union = $mostrador;
+            } else {
+                $union = $union->union($mostrador);
+            }
+        }
 
-        // Unificar
-        $union = $pagos->union($mostrador)->union($manuales);
+        // 3. Ingresos manuales - solo si no hay filtro tipo o tipo es INGRESO_MANUAL
+        if (!$tipo || $tipo === 'INGRESO_MANUAL') {
+            $manuales = DB::table('ingresos_manuales')
+                ->where('empresa_id', $empresaId)
+                ->where('estado', 'ACTIVO')
+                ->select(
+                    DB::raw("CAST(id AS CHAR) as id"),
+                    DB::raw("CONCAT('MAN-', id) as recibo"),
+                    'fecha',
+                    DB::raw("'INGRESO_MANUAL' as tipo"),
+                    'monto',
+                    DB::raw("'EFECTIVO' as forma_pago"),
+                    DB::raw("NULL as referencia"),
+                    'notas',
+                    DB::raw('NULL as cliente_nombre'),
+                    'created_at as orden'
+                );
+            
+            if ($union === null) {
+                $union = $manuales;
+            } else {
+                $union = $union->union($manuales);
+            }
+        }
+
+        // Si no hay unión, retornar paginador vacío
+        if ($union === null) {
+            return new Paginator(collect(), 0, $perPage, 1, []);
+        }
         
-        // Filtros
+        // ✅ Filtros de fecha
         if ($desde) {
             $union->whereDate('fecha', '>=', $desde);
         }
@@ -87,7 +112,7 @@ class IngresoUnificadoService
             });
         }
         
-        // ✅ Ordenar por fecha de creación (más reciente primero) y luego por fecha
+        // Ordenar por fecha de creación (más reciente primero)
         $union->orderBy('orden', 'desc');
         
         // Obtener resultados

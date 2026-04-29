@@ -16,16 +16,47 @@ class AuditoriaController extends Controller
     // GET /api/auditoria
     public function index(Request $request): JsonResponse
     {
+        $filters = [
+            'accion' => $request->query('accion'),
+            'desde'  => $request->query('desde'),
+            'hasta'  => $request->query('hasta'),
+        ];
+        
+        $perPage = (int) $request->query('per_page', 20);
+        
+        $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
+        
         return response()->json(
-            $this->auditoriaService->listarPorEmpresa($request->empresa_id_ctx)
+            $this->auditoriaService->listarPorEmpresa(
+                $request->empresa_id_ctx,
+                $filters,
+                $perPage
+            )
         );
     }
 
     // GET /api/usuarios/{id}/auditoria
-    public function porUsuario(Request $request, int $id): JsonResponse
+    public function porUsuario(Request $request, $id): JsonResponse
     {
+        $usuarioId = (int) $id;
+        
+        $filters = [
+            'accion' => $request->query('accion'),
+            'desde'  => $request->query('desde'),
+            'hasta'  => $request->query('hasta'),
+        ];
+        
+        $perPage = (int) $request->query('per_page', 20);
+        
+        $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
+        
         return response()->json(
-            $this->auditoriaService->listarPorUsuario($id, $request->empresa_id_ctx)
+            $this->auditoriaService->listarPorUsuario(
+                $usuarioId,
+                $request->empresa_id_ctx,
+                $filters,
+                $perPage
+            )
         );
     }
 }

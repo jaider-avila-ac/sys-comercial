@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Empresa;
 use App\Repositories\EmpresaRepository;
 use App\Repositories\NumeracionRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -17,9 +18,15 @@ class EmpresaService
         private readonly NumeracionRepository $numeracionRepository,
     ) {}
 
-    public function listar(): Collection
+    public function listar(string $search = '', int $perPage = 20): LengthAwarePaginator
     {
-        return $this->empresaRepository->all();
+        return Empresa::when($search, function ($query, $search) {
+                return $query->where('nombre', 'like', "%{$search}%")
+                             ->orWhere('nit', 'like', "%{$search}%")
+                             ->orWhere('email', 'like', "%{$search}%");
+            })
+            ->orderBy('nombre')
+            ->paginate($perPage);
     }
 
     public function obtener(int $id): Empresa
