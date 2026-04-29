@@ -18,6 +18,12 @@ use App\Http\Controllers\Api\UsuarioController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\BrevoConfigController;
 use App\Http\Middleware\ResolveEmpresaContext;
+use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\InventarioMovimientoController;
+use App\Http\Controllers\Api\CompraController;
+use App\Http\Controllers\Api\ReporteController;
+use App\Http\Controllers\Api\IngresoUnificadoController;
+
 
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +65,10 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
         Route::get('/{id}/sesiones',   [SesionController::class,    'porUsuario']);
     });
 
+    Route::prefix('reportes')->group(function () {
+    Route::get('/financiero', [ReporteController::class, 'financiero']);
+});
+
     Route::prefix('clientes')->group(function () {
         Route::get('/',              [ClienteController::class, 'index']);
         Route::post('/',             [ClienteController::class, 'store']);
@@ -67,6 +77,14 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
         Route::patch('/{id}/toggle', [ClienteController::class, 'toggle']);
         Route::delete('/{id}',       [ClienteController::class, 'destroy']);
     });
+
+    Route::prefix('inventario')->group(function () {
+    Route::get('/movimientos', [InventarioMovimientoController::class, 'index']);
+});
+
+Route::prefix('ingresos')->group(function () {
+    Route::get('/unificados', [IngresoUnificadoController::class, 'index']);
+});
 
     Route::prefix('items')->group(function () {
         Route::get('/',              [ItemController::class, 'index']);
@@ -119,7 +137,7 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
     Route::get('/',             [EgresoManualController::class, 'index']);
     Route::post('/',            [EgresoManualController::class, 'store']);
     Route::get('/{id}',         [EgresoManualController::class, 'show']);
-    Route::put('/{id}',         [EgresoManualController::class, 'update']);   // ✅ nuevo // ✅ nuevo
+    Route::put('/{id}',         [EgresoManualController::class, 'update']);   
     Route::post('/{id}/anular', [EgresoManualController::class, 'anular']);
 });
 
@@ -129,6 +147,16 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
         Route::get('/{id}',         [EgresoCompraController::class, 'show']);
         Route::post('/{id}/anular', [EgresoCompraController::class, 'anular']);
     });
+
+    Route::prefix('compras')->group(function () {
+    Route::get('/', [CompraController::class, 'index']);
+    Route::get('/cuentas-por-pagar', [CompraController::class, 'cuentasPorPagar']);
+    Route::get('/{id}', [CompraController::class, 'show']);
+    Route::post('/', [CompraController::class, 'store']);
+    Route::post('/{id}/confirmar', [CompraController::class, 'confirmar']);
+    Route::post('/{id}/pagar', [CompraController::class, 'pagar']);
+    Route::post('/{id}/anular', [CompraController::class, 'anular']);
+});
 
     
 
@@ -150,7 +178,7 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
 
     // Auditoría
     Route::get('auditoria', [AuditoriaController::class, 'index']);
-
+Route::post('/stock/verificar', [StockController::class, 'verificar']);
     // Sesiones
     Route::prefix('sesiones')->group(function () {
         Route::get('activas',        [SesionController::class, 'activas']);

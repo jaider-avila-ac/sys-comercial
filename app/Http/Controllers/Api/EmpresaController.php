@@ -22,13 +22,22 @@ class EmpresaController extends Controller
     // GET /api/empresa/me
     public function me(Request $request): JsonResponse
     {
-        return response()->json($this->empresaService->obtener($request->empresa_id_ctx));
+        $empresa = $this->empresaService->obtener($request->empresa_id_ctx);
+        
+        // ✅ Devolver en el formato que espera el frontend
+        return response()->json([
+            'empresa' => $empresa
+        ]);
     }
 
     // GET /api/empresas/{id}
     public function show(int $id): JsonResponse
     {
-        return response()->json($this->empresaService->obtener($id));
+        $empresa = $this->empresaService->obtener($id);
+        
+        return response()->json([
+            'empresa' => $empresa
+        ]);
     }
 
     // POST /api/empresas
@@ -57,7 +66,11 @@ class EmpresaController extends Controller
             'is_activa' => ['sometimes', 'boolean'],
         ]);
 
-        return response()->json($this->empresaService->actualizar($id, $data));
+        $empresa = $this->empresaService->actualizar($id, $data);
+        
+        return response()->json([
+            'empresa' => $empresa
+        ]);
     }
 
     // DELETE /api/empresas/{id}
@@ -74,12 +87,20 @@ class EmpresaController extends Controller
             'logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
-        return response()->json($this->empresaService->subirLogo($id, $request->file('logo')));
+        $empresa = $this->empresaService->subirLogo($id, $request->file('logo'));
+        
+        return response()->json([
+            'empresa' => $empresa
+        ]);
     }
 
     // DELETE /api/empresas/{id}/logo
     public function deleteLogo(int $id): JsonResponse
     {
-        return response()->json($this->empresaService->eliminarLogo($id));
+        $empresa = $this->empresaService->eliminarLogo($id);
+        
+        return response()->json([
+            'empresa' => $empresa
+        ]);
     }
 }

@@ -46,4 +46,9 @@ class Item extends Model
     {
         return $this->hasOne(Inventario::class, 'item_id');
     }
+
+    public function facturaLineas()
+{
+    return $this->hasMany(FacturaLinea::class, 'item_id');
+}
 }

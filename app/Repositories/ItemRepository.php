@@ -9,36 +9,46 @@ use Illuminate\Support\Collection;
 class ItemRepository
 {
     public function allByEmpresa(int $empresaId): Collection
-    {
-        return Item::where('empresa_id', $empresaId)
-            ->with(['inventario', 'proveedor'])
-            ->orderBy('nombre')
-            ->get();
+{
+    return Item::where('empresa_id', $empresaId)
+        ->with(['inventario', 'proveedor'])
+        ->withCount([
+            'facturaLineas as total_vendido' => function ($query) {
+                $query->select(\DB::raw('SUM(cantidad)'));
+            }
+        ])
+        ->orderBy('nombre')
+        ->get();
+}
+
+   public function paginateByEmpresa(int $empresaId, int $perPage = 15, array $filters = []): LengthAwarePaginator
+{
+    $query = Item::where('empresa_id', $empresaId)
+        ->with(['inventario', 'proveedor'])
+        ->withCount([
+            'facturaLineas as total_vendido' => function ($query) {
+                $query->select(\DB::raw('SUM(cantidad)'));
+            }
+        ])
+        ->orderBy('nombre');
+
+    if (!empty($filters['search'])) {
+        $query->where(function ($q) use ($filters) {
+            $q->where('nombre', 'like', '%' . $filters['search'] . '%')
+              ->orWhere('descripcion', 'like', '%' . $filters['search'] . '%');
+        });
     }
 
-    public function paginateByEmpresa(int $empresaId, int $perPage = 15, array $filters = []): LengthAwarePaginator
-    {
-        $query = Item::where('empresa_id', $empresaId)
-            ->with(['inventario', 'proveedor'])
-            ->orderBy('nombre');
-
-        if (!empty($filters['search'])) {
-            $query->where(function ($q) use ($filters) {
-                $q->where('nombre', 'like', '%' . $filters['search'] . '%')
-                  ->orWhere('descripcion', 'like', '%' . $filters['search'] . '%');
-            });
-        }
-
-        if (!empty($filters['tipo'])) {
-            $query->where('tipo', $filters['tipo']);
-        }
-
-        if (array_key_exists('controla_inventario', $filters) && $filters['controla_inventario'] !== null) {
-            $query->where('controla_inventario', $filters['controla_inventario']);
-        }
-
-        return $query->paginate($perPage);
+    if (!empty($filters['tipo'])) {
+        $query->where('tipo', $filters['tipo']);
     }
+
+    if (array_key_exists('controla_inventario', $filters) && $filters['controla_inventario'] !== null) {
+        $query->where('controla_inventario', $filters['controla_inventario']);
+    }
+
+    return $query->paginate($perPage);
+}
 
     public function findById(int $id): ?Item
     {

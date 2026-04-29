@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Compra;
 use App\Repositories\CompraRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -13,9 +14,19 @@ class CompraService
         private readonly CompraRepository $compraRepository,
     ) {}
 
-    public function listar(int $empresaId): Collection
+    public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return $this->compraRepository->allByEmpresa($empresaId);
+        return $this->compraRepository->paginate($empresaId, $filters, $perPage);
+    }
+
+    public function cuentasPorPagar(int $empresaId): Collection
+    {
+        return Compra::where('empresa_id', $empresaId)
+            ->whereIn('estado', ['PENDIENTE', 'PARCIAL'])
+            ->where('saldo_pendiente', '>', 0)
+            ->with(['proveedor', 'items.item'])
+            ->orderBy('fecha_vencimiento')
+            ->get();
     }
 
     public function obtener(int $id, int $empresaId): Compra
@@ -31,7 +42,6 @@ class CompraService
 
     public function crear(array $data, int $empresaId, int $usuarioId): Compra
     {
-        // Calcular totales
         $subtotal = 0;
         foreach ($data['items'] as $item) {
             $subtotal += $item['cantidad'] * $item['precio_unitario'];
@@ -72,7 +82,6 @@ class CompraService
             throw new HttpException(422, 'La compra ya ha sido confirmada.');
         }
 
-        // Generar número de compra
         $ultimaCompra = Compra::where('empresa_id', $empresaId)
             ->whereNotNull('numero')
             ->orderBy('id', 'desc')

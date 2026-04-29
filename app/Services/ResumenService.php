@@ -57,42 +57,41 @@ class ResumenService
             ')
             ->first();
 
-        // ── Ingresos que sí entran a caja directa ────────────────────────────
-        $ingresosFacturas = DB::table('caja_movimientos')
+        // ── INGRESOS: Sumar desde las tablas de origen (NO desde caja_movimientos) ──
+        $ingresosFacturas = DB::table('ingresos_pagos')
             ->where('empresa_id', $empresaId)
-            ->where('origen_tipo', 'INGRESO_PAGO')
+            ->where('estado', 'ACTIVO')
             ->sum('monto');
 
-        $ingresosMostrador = DB::table('caja_movimientos')
-            ->where('empresa_id', $empresaId)
-            ->where('origen_tipo', 'INGRESO_MOSTRADOR')
-            ->sum('monto');
+      $ingresosMostrador = DB::table('ingresos_mostrador')
+    ->where('empresa_id', $empresaId)
+    ->where('estado', 'ACTIVO')
+    ->sum('monto');
 
-        // ── Ingresos manuales reales (solo activos) ──────────────────────────
         $ingresosManuales = DB::table('ingresos_manuales')
             ->where('empresa_id', $empresaId)
             ->where('estado', 'ACTIVO')
             ->sum('monto');
 
-        // ── Total en caja = facturas + mostrador ─────────────────────────────
-        $totalEnCaja = $ingresosFacturas + $ingresosMostrador;
-
-        // ── Egresos de compras ────────────────────────────────────────────────
-        $egresosCompras = DB::table('caja_movimientos')
+        // ── EGRESOS: Sumar desde las tablas de origen (NO desde caja_movimientos) ──
+        $egresosCompras = DB::table('egresos_compras')
             ->where('empresa_id', $empresaId)
-            ->where('origen_tipo', 'EGRESO_COMPRA')
+            ->where('estado', 'ACTIVO')
             ->sum('monto');
 
-        // ── Egresos manuales reales (solo activos) ───────────────────────────
         $egresosManuales = DB::table('egresos_manuales')
             ->where('empresa_id', $empresaId)
             ->where('estado', 'ACTIVO')
             ->sum('monto');
 
+        // ── Total en caja = facturas + mostrador + manuales ──
+        $totalEnCaja = $ingresosFacturas + $ingresosMostrador + $ingresosManuales;
+
+        // ── Total egresos = egresos compras + egresos manuales ──
         $totalEgresos = $egresosCompras + $egresosManuales;
 
-        // ── Balance real = caja + ingresos manuales − egresos ───────────────
-        $balanceReal = $totalEnCaja + $ingresosManuales - $totalEgresos;
+        // ── Balance real = total_en_caja - total_egresos ──
+        $balanceReal = $totalEnCaja - $totalEgresos;
 
         return [
             'empresa_id'           => $empresaId,

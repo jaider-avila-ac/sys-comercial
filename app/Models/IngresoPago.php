@@ -24,9 +24,9 @@ class IngresoPago extends Model
         'estado',
     ];
 
-    protected $casts = [
+     protected $casts = [
         'monto'      => 'decimal:2',
-        'fecha'      => 'date',
+        'fecha'      => 'date:Y-m-d',  
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

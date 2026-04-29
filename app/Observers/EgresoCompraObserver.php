@@ -3,6 +3,8 @@
 namespace App\Observers;
 
 use App\Models\EgresoCompra;
+use App\Observers\AuditableTrait;
+use App\Observers\ResumenTrait;  
 
 class EgresoCompraObserver
 {

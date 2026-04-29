@@ -14,13 +14,34 @@ class CompraController extends Controller
     ) {}
 
     // GET /api/compras
-    public function index(Request $request): JsonResponse
-    {
-        return response()->json(
-            $this->compraService->listar($request->empresa_id_ctx)
-        );
-    }
+    // GET /api/compras
+public function index(Request $request): JsonResponse
+{
+    $filters = [
+        'search'      => $request->get('search'),
+        'estado'      => $request->get('estado'),
+        'proveedor_id'=> $request->get('proveedor_id'),
+        'desde'       => $request->get('desde'),
+        'hasta'       => $request->get('hasta'),
+        'pendientes'  => $request->get('pendientes'),
+    ];
+    
+    $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
+    
+    $perPage = (int) $request->get('per_page', 20);
+    
+    return response()->json(
+        $this->compraService->listar($request->empresa_id_ctx, $filters, $perPage)
+    );
+}
 
+// Agrega el método para cuentas por pagar
+public function cuentasPorPagar(Request $request): JsonResponse
+{
+    return response()->json(
+        $this->compraService->cuentasPorPagar($request->empresa_id_ctx)
+    );
+}
     // GET /api/compras/{id}
     public function show(Request $request, int $id): JsonResponse
     {

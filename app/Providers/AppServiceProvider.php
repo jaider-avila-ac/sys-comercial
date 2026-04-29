@@ -33,6 +33,7 @@ use App\Repositories\Contracts\UsuarioRepositoryInterface;
 use App\Repositories\ClienteRepository;
 use App\Repositories\UsuarioRepository;
 use Illuminate\Support\ServiceProvider;
+use App\Services\ReporteService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -42,7 +43,7 @@ class AppServiceProvider extends ServiceProvider
        
         $this->app->bind(ClienteRepositoryInterface::class,          ClienteRepository::class);
     
-      
+    
      
     }
 
