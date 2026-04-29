@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\IngresoMostrador;
 use App\Repositories\IngresoMostradorRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -11,12 +12,12 @@ class IngresoMostradorService
 {
     public function __construct(
         private readonly IngresoMostradorRepository $ingresoMostradorRepository,
-        private readonly NumeracionService                   $numeracionService,
+        private readonly NumeracionService $numeracionService,
     ) {}
 
-    public function listar(int $empresaId): Collection
+    public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return $this->ingresoMostradorRepository->allByEmpresa($empresaId);
+        return $this->ingresoMostradorRepository->paginate($empresaId, $filters, $perPage);
     }
 
     public function obtener(int $id, int $empresaId): IngresoMostrador
@@ -68,4 +69,3 @@ class IngresoMostradorService
         return $this->ingresoMostradorRepository->anular($id, $empresaId, $usuarioId);
     }
 }
-

@@ -16,8 +16,17 @@ class IngresoMostradorController extends Controller
     // GET /api/ingresos/mostrador
     public function index(Request $request): JsonResponse
     {
+        $filters = [
+            'search' => $request->get('search'),
+            'desde'  => $request->get('desde'),
+            'hasta'  => $request->get('hasta'),
+        ];
+        
+        $filters = array_filter($filters, fn($v) => $v !== null && $v !== '');
+        $perPage = (int) $request->get('per_page', 20);
+        
         return response()->json(
-            $this->ingresoMostradorService->listar($request->empresa_id_ctx)
+            $this->ingresoMostradorService->listar($request->empresa_id_ctx, $filters, $perPage)
         );
     }
 

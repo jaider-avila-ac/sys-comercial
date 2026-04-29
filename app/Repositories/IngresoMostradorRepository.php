@@ -13,23 +13,23 @@ use Illuminate\Support\Facades\DB;
 class IngresoMostradorRepository
 {
     public function paginate(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
-    {
-        $search = $filters['search'] ?? '';
-        $desde  = $filters['desde']  ?? null;
-        $hasta  = $filters['hasta']  ?? null;
+{
+    $search = $filters['search'] ?? '';
+    $desde  = $filters['desde']  ?? null;
+    $hasta  = $filters['hasta']  ?? null;
 
-        return IngresoMostrador::where('empresa_id', $empresaId)
-            ->with(['usuario', 'item'])
-            ->when($search, fn($q) => $q->where(fn($q) =>
-                $q->where('numero',      'like', "%{$search}%")
-                  ->orWhere('descripcion','like', "%{$search}%")
-            ))
-            ->when($desde, fn($q) => $q->whereDate('fecha', '>=', $desde))
-            ->when($hasta, fn($q) => $q->whereDate('fecha', '<=', $hasta))
-            ->orderByDesc('fecha')
-            ->paginate($perPage);
-    }
-
+    return IngresoMostrador::where('empresa_id', $empresaId)
+        ->with(['usuario', 'item'])
+        ->when($search, fn($q) => $q->where(function($q) use ($search) {
+            $q->where('numero', 'like', "%{$search}%")
+              ->orWhere('descripcion', 'like', "%{$search}%")
+              ->orWhereHas('item', fn($q) => $q->where('nombre', 'like', "%{$search}%"));
+        }))
+        ->when($desde, fn($q) => $q->whereDate('fecha', '>=', $desde))
+        ->when($hasta, fn($q) => $q->whereDate('fecha', '<=', $hasta))
+        ->orderByDesc('fecha')
+        ->paginate($perPage);
+}
     public function allByEmpresa(int $empresaId): Collection
     {
         return IngresoMostrador::where('empresa_id', $empresaId)
