@@ -3,19 +3,19 @@
 namespace App\Services;
 
 use App\Models\Cliente;
-use App\Repositories\Contracts\ClienteRepositoryInterface;
+use App\Repositories\ClienteRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ClienteService
 {
     public function __construct(
-        private readonly ClienteRepositoryInterface $clienteRepository,
+        private readonly ClienteRepository $clienteRepository,
     ) {}
 
-    public function listar(int $empresaId, string $search = ''): LengthAwarePaginator
+    public function listar(int $empresaId, string $search = '', int $perPage = 20): LengthAwarePaginator
     {
-        return $this->clienteRepository->paginate($empresaId, $search);
+        return $this->clienteRepository->paginate($empresaId, $search, $perPage);
     }
 
     public function obtener(int $id, int $empresaId): Cliente

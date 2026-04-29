@@ -3,20 +3,21 @@
 namespace App\Repositories;
 
 use App\Models\Cliente;
-use App\Repositories\Contracts\ClienteRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
-class ClienteRepository implements ClienteRepositoryInterface
+class ClienteRepository
 {
     public function paginate(int $empresaId, string $search = '', int $perPage = 20): LengthAwarePaginator
     {
         return Cliente::where('empresa_id', $empresaId)
-            ->when($search, fn($q) => $q->where(fn($q) =>
-                $q->where('nombre_razon_social', 'like', "%{$search}%")
-                  ->orWhere('num_documento',     'like', "%{$search}%")
-                  ->orWhere('email',             'like', "%{$search}%")
-                  ->orWhere('telefono',          'like', "%{$search}%")
-            ))
+            ->when($search, function($q) use ($search) {
+                return $q->where(function($q) use ($search) {
+                    $q->where('nombre_razon_social', 'like', "%{$search}%")
+                      ->orWhere('num_documento', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%")
+                      ->orWhere('telefono', 'like', "%{$search}%");
+                });
+            })
             ->orderBy('nombre_razon_social')
             ->paginate($perPage);
     }

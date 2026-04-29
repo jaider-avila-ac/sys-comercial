@@ -24,8 +24,8 @@ class Cotizacion extends Model
     ];
 
     protected $casts = [
-        'fecha'            => 'date',
-        'fecha_vencimiento' => 'date',
+        'fecha' => 'date:Y-m-d',
+        'fecha_vencimiento' => 'date:Y-m-d',
         'subtotal'         => 'decimal:2',
         'total_descuentos' => 'decimal:2',
         'total_iva'        => 'decimal:2',

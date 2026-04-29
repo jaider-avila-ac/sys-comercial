@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\InventarioMovimientoController;
 use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\IngresoUnificadoController;
+use App\Http\Controllers\Api\EgresoUnificadoController;
 
 
 use Illuminate\Support\Facades\Route;
@@ -87,6 +88,10 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
 
 Route::prefix('ingresos')->group(function () {
     Route::get('/unificados', [IngresoUnificadoController::class, 'index']);
+});
+
+Route::prefix('egresos')->group(function () {
+    Route::get('/unificados', [EgresoUnificadoController::class, 'index']);
 });
 
     Route::prefix('items')->group(function () {

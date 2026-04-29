@@ -28,7 +28,6 @@ use App\Observers\IngresoPagoObserver;
 use App\Observers\ItemObserver;
 use App\Observers\ProveedorObserver;
 use App\Observers\UsuarioObserver;
-use App\Repositories\Contracts\ClienteRepositoryInterface;
 use App\Repositories\ClienteRepository;
 use App\Repositories\UsuarioRepository;
 use Illuminate\Support\ServiceProvider;
@@ -38,11 +37,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-      
-       
-        $this->app->bind(ClienteRepositoryInterface::class,          ClienteRepository::class);
-    
-    
+
      
     }
 

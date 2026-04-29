@@ -16,10 +16,14 @@ class ClienteController extends Controller
     // GET /api/clientes
     public function index(Request $request): JsonResponse
     {
+        // Asegurar que search sea siempre string
+        $search = $request->get('search');
+        $search = is_string($search) ? $search : '';
+        
         return response()->json(
             $this->clienteService->listar(
                 $request->empresa_id_ctx,
-                $request->get('search', '')
+                $search
             )
         );
     }

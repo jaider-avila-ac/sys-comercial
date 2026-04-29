@@ -2,14 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\EmpresaResumen;
 use Illuminate\Support\Facades\DB;
 
 class ReporteService
 {
-    public function __construct(
-        private readonly ResumenService $resumenService,
-    ) {}
-
     /**
      * Obtiene reporte financiero completo por rango de fechas
      */
@@ -58,24 +55,39 @@ class ReporteService
             ];
         });
 
-        // 2. Totales de facturación
-        $totalesFacturacion = DB::table('facturas')
+        // 2. Totales del período
+        $totalesPeriodo = DB::table('facturas')
             ->where('empresa_id', $empresaId)
             ->where('estado', 'EMITIDA')
             ->whereBetween('fecha', [$desde, $hasta])
             ->selectRaw('
                 COALESCE(SUM(total), 0) as total_facturado,
-                COALESCE(SUM(total_pagado), 0) as total_cobrado,
-                COALESCE(SUM(total_iva), 0) as total_iva,
-                COALESCE(SUM(subtotal), 0) as total_subtotal
+                COALESCE(SUM(total_pagado), 0) as total_pagado_facturas
             ')
             ->first();
 
-        $totalFacturado = round((float) ($totalesFacturacion->total_facturado ?? 0), 2);
-        $totalCobrado = round((float) ($totalesFacturacion->total_cobrado ?? 0), 2);
-        $saldoPendiente = $totalFacturado - $totalCobrado;
+        $totalFacturado = round((float) ($totalesPeriodo->total_facturado ?? 0), 2);
+        $totalPagadoFacturas = round((float) ($totalesPeriodo->total_pagado_facturas ?? 0), 2);
+        $saldoPendiente = $totalFacturado - $totalPagadoFacturas;
 
-        // 3. Egresos del período
+        // 3. Ingresos mostrador del período
+        $ingresosMostrador = DB::table('ingresos_mostrador')
+            ->where('empresa_id', $empresaId)
+            ->where('estado', 'ACTIVO')
+            ->whereBetween('fecha', [$desde, $hasta])
+            ->sum('monto');
+
+        // 4. Ingresos manuales del período
+        $ingresosManuales = DB::table('ingresos_manuales')
+            ->where('empresa_id', $empresaId)
+            ->where('estado', 'ACTIVO')
+            ->whereBetween('fecha', [$desde, $hasta])
+            ->sum('monto');
+
+        // 5. Total cobrado en el período
+        $totalCobradoPeriodo = $totalPagadoFacturas + $ingresosMostrador + $ingresosManuales;
+
+        // 6. Egresos del período
         $egresosCompras = DB::table('egresos_compras')
             ->where('empresa_id', $empresaId)
             ->where('estado', 'ACTIVO')
@@ -88,12 +100,12 @@ class ReporteService
             ->whereBetween('fecha', [$desde, $hasta])
             ->sum('monto');
 
-        $totalEgresos = round((float) ($egresosCompras + $egresosManuales), 2);
+        $totalEgresosPeriodo = round((float) ($egresosCompras + $egresosManuales), 2);
 
-        // 4. Balance real de caja
-        $balanceReal = round($totalCobrado - $totalEgresos, 2);
+        // 7. Balance real del período
+        $balanceRealPeriodo = $totalCobradoPeriodo - $totalEgresosPeriodo;
 
-        // 5. Compras (para info adicional)
+        // 8. Datos adicionales de compras
         $comprasContado = DB::table('compras')
             ->where('empresa_id', $empresaId)
             ->where('condicion_pago', 'CONTADO')
@@ -109,10 +121,10 @@ class ReporteService
 
         return [
             'total_facturado' => $totalFacturado,
-            'total_cobrado' => $totalCobrado,
+            'total_cobrado' => $totalCobradoPeriodo,
             'saldo_pendiente' => $saldoPendiente,
-            'total_egresos' => $totalEgresos,
-            'balance_real' => $balanceReal,
+            'total_egresos' => $totalEgresosPeriodo,
+            'balance_real' => $balanceRealPeriodo,
             'egresos_compras' => round((float) $egresosCompras, 2),
             'egresos_manuales' => round((float) $egresosManuales, 2),
             'compras_contado' => round((float) $comprasContado, 2),
