@@ -15,7 +15,7 @@ class ReporteController extends Controller
 
     /**
      * GET /api/reportes/financiero
-     * Reporte financiero por rango de fechas
+     * Reporte financiero completo (KPIs + Rendimiento de ítems)
      */
     public function financiero(Request $request): JsonResponse
     {
@@ -31,5 +31,52 @@ class ReporteController extends Controller
         );
 
         return response()->json($resultado);
+    }
+
+    /**
+     * GET /api/reportes/kpis
+     * SOLO KPIs financieros (sin rendimiento de ítems)
+     */
+    public function kpis(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'desde' => 'required|date',
+            'hasta' => 'required|date|after_or_equal:desde',
+        ]);
+
+        $resultado = $this->reporteService->getKPIs(
+            $request->empresa_id_ctx,
+            $data['desde'],
+            $data['hasta']
+        );
+
+        return response()->json($resultado);
+    }
+
+    /**
+     * GET /api/reportes/rendimiento-items
+     * SOLO rendimiento de ítems (sin KPIs)
+     */
+    public function rendimientoItems(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'desde' => 'required|date',
+            'hasta' => 'required|date|after_or_equal:desde',
+        ]);
+
+        $resultado = $this->reporteService->getRendimientoItemsReporte(
+            $request->empresa_id_ctx,
+            $data['desde'],
+            $data['hasta']
+        );
+
+        return response()->json([
+            'rendimiento_items' => $resultado,
+            'resumen' => [
+                'desde' => $data['desde'],
+                'hasta' => $data['hasta'],
+                'total_items' => count($resultado),
+            ],
+        ]);
     }
 }

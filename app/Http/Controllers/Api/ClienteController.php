@@ -13,17 +13,21 @@ class ClienteController extends Controller
         private readonly ClienteService $clienteService,
     ) {}
 
-    // GET /api/clientes
-    public function index(Request $request): JsonResponse
+     public function index(Request $request): JsonResponse
     {
-        // Asegurar que search sea siempre string
-        $search = $request->get('search');
+        $search = $request->get('search', '');
         $search = is_string($search) ? $search : '';
+        
+        // Obtener parámetros de paginación
+        $perPage = (int) $request->get('per_page', 10);
+        $page = (int) $request->get('page', 1);
         
         return response()->json(
             $this->clienteService->listar(
                 $request->empresa_id_ctx,
-                $search
+                $search,
+                $perPage,
+                $page
             )
         );
     }

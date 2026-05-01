@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class CotizacionRepository
 {
-    public function paginar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
+      public function paginar(int $empresaId, array $filters = [], int $perPage = 10, int $page = 1): LengthAwarePaginator
     {
         $query = Cotizacion::where('empresa_id', $empresaId)
             ->with(['cliente'])
@@ -27,7 +27,7 @@ class CotizacionRepository
             $query->where('estado', $filters['estado']);
         }
 
-        return $query->paginate($perPage);
+        return $query->paginate($perPage, ['*'], 'page', $page);
     }
 
     public function findById(int $id): ?Cotizacion

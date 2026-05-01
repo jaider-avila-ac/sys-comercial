@@ -13,10 +13,21 @@ class ClienteService
         private readonly ClienteRepository $clienteRepository,
     ) {}
 
-    public function listar(int $empresaId, string $search = '', int $perPage = 20): LengthAwarePaginator
+     public function listar(int $empresaId, string $search = '', int $perPage = 10, int $page = 1): array
     {
-        return $this->clienteRepository->paginate($empresaId, $search, $perPage);
+        $paginator = $this->clienteRepository->paginate($empresaId, $search, $perPage, $page);
+        
+        return [
+            'data' => $paginator->items(),
+            'total' => $paginator->total(),
+            'per_page' => $paginator->perPage(),
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+        ];
     }
+
 
     public function obtener(int $id, int $empresaId): Cliente
     {

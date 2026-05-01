@@ -13,15 +13,21 @@ class CotizacionController extends Controller
         private readonly CotizacionService $cotizacionService,
     ) {}
 
-    public function index(Request $request): JsonResponse
-{
-    return response()->json(
-        $this->cotizacionService->listar(
-            $request->empresa_id_ctx,
-            $request->only(['search', 'estado'])
-        )
-    );
-}
+  public function index(Request $request): JsonResponse
+    {
+        // Obtener parámetros de paginación
+        $perPage = (int) $request->get('per_page', 10);
+        $page = (int) $request->get('page', 1);
+        
+        return response()->json(
+            $this->cotizacionService->listar(
+                $request->empresa_id_ctx,
+                $request->only(['search', 'estado']),
+                $perPage,
+                $page
+            )
+        );
+    }
 
     public function show(Request $request, int $id): JsonResponse
     {

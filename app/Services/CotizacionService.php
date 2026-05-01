@@ -15,10 +15,20 @@ class CotizacionService
         private readonly NumeracionService             $numeracionService,
     ) {}
 
-   public function listar(int $empresaId, array $filters = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
-{
-    return $this->cotizacionRepository->paginar($empresaId, $filters);
-}
+   public function listar(int $empresaId, array $filters = [], int $perPage = 10, int $page = 1): array
+    {
+        $paginator = $this->cotizacionRepository->paginar($empresaId, $filters, $perPage, $page);
+        
+        return [
+            'data' => $paginator->items(),
+            'total' => $paginator->total(),
+            'per_page' => $paginator->perPage(),
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+        ];
+    }
 
     public function obtener(int $id, int $empresaId): Cotizacion
     {

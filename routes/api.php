@@ -70,7 +70,9 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
 });
 
     Route::prefix('reportes')->group(function () {
-    Route::get('/financiero', [ReporteController::class, 'financiero']);
+    Route::get('/financiero',       [ReporteController::class, 'financiero']);
+    Route::get('/kpis',             [ReporteController::class, 'kpis']);           // 👈 NUEVA
+    Route::get('/rendimiento-items', [ReporteController::class, 'rendimientoItems']); // 👈 NUEVA
 });
 
     Route::prefix('clientes')->group(function () {

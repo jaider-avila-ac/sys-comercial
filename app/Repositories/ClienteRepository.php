@@ -7,7 +7,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class ClienteRepository
 {
-    public function paginate(int $empresaId, string $search = '', int $perPage = 20): LengthAwarePaginator
+   public function paginate(int $empresaId, string $search = '', int $perPage = 10, int $page = 1): LengthAwarePaginator
     {
         return Cliente::where('empresa_id', $empresaId)
             ->when($search, function($q) use ($search) {
@@ -19,8 +19,9 @@ class ClienteRepository
                 });
             })
             ->orderBy('nombre_razon_social')
-            ->paginate($perPage);
+            ->paginate($perPage, ['*'], 'page', $page);
     }
+
 
     public function findById(int $id): ?Cliente
     {
