@@ -18,7 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
   
 
-
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'check.active.token' => \App\Http\Middleware\CheckActiveToken::class,
+    ]);
+})
 
 
     ->withMiddleware(function (Middleware $middleware) {

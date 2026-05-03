@@ -48,24 +48,38 @@ class UsuarioController extends Controller
         ]);
     }
 
-    // POST /api/usuarios
-    public function store(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'nombres'   => ['required', 'string', 'max:120'],
-            'apellidos' => ['required', 'string', 'max:120'],
-            'email'     => ['required', 'email', 'max:150'],
-            'password'  => ['required', 'string', 'min:8'],
-            'rol'       => ['required', 'in:EMPRESA_ADMIN,OPERATIVO'],
-        ]);
-
-        return response()->json([
-            'usuario' => $this->usuarioService->crear(
-                data:      $data,
-                empresaId: $request->empresa_id_ctx,
-            )
-        ], 201);
+    // POST /api/usuarios - MODIFICAR para SUPER_ADMIN
+public function store(Request $request): JsonResponse
+{
+    $isSuperAdmin = $request->user()->esSuperAdmin();
+    
+    $rules = [
+        'nombres'   => ['required', 'string', 'max:120'],
+        'apellidos' => ['required', 'string', 'max:120'],
+        'email'     => ['required', 'email', 'max:150'],
+        'password'  => ['required', 'string', 'min:8'],
+        'rol'       => ['required', 'in:SUPER_ADMIN,EMPRESA_ADMIN,OPERATIVO'],
+    ];
+    
+    // SUPER_ADMIN puede asignar empresa_id y todos los roles
+    if ($isSuperAdmin) {
+        $rules['empresa_id'] = ['required', 'integer', 'exists:empresas,id'];
+    } else {
+        // EMPRESA_ADMIN solo puede crear OPERATIVO para su empresa
+        $rules['rol'] = ['required', 'in:OPERATIVO'];
     }
+    
+    $data = $request->validate($rules);
+    
+    $empresaId = $isSuperAdmin ? $data['empresa_id'] : $request->empresa_id_ctx;
+    
+    return response()->json([
+        'usuario' => $this->usuarioService->crear(
+            data:      $data,
+            empresaId: $empresaId,
+        )
+    ], 201);
+}
 
     // PUT /api/usuarios/{id}
     public function update(Request $request, $id): JsonResponse
@@ -90,16 +104,18 @@ class UsuarioController extends Controller
     }
 
     // PATCH /api/usuarios/{id}/toggle
-    public function toggle(Request $request, $id): JsonResponse
+    public function toggle(Request $request, int $id): JsonResponse
     {
-        $usuarioId = (int) $id;
+        $usuario = $this->usuarioService->toggleActivo($id, $request->empresa_id_ctx, $request->user()->rol === 'SUPER_ADMIN');
+        
+        // Si el usuario fue desactivado, revocar todos sus tokens
+        if (!$usuario->is_activo) {
+            $this->usuarioService->revocarTodosLosTokens($id, $request->empresa_id_ctx, $request->user()->rol === 'SUPER_ADMIN');
+        }
         
         return response()->json([
-            'usuario' => $this->usuarioService->toggleActivo(
-                id:           $usuarioId,
-                empresaId:    $request->empresa_id_ctx,
-                esSuperAdmin: $request->user()->esSuperAdmin(),
-            )
+            'usuario' => $usuario,
+            'message' => $usuario->is_activo ? 'Usuario activado' : 'Usuario desactivado y sesiones cerradas'
         ]);
     }
 
@@ -121,6 +137,9 @@ class UsuarioController extends Controller
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);
     }
+
+
+    
     
     // GET /api/usuarios/activos-ahora
     public function activosAhora(Request $request): JsonResponse
@@ -133,4 +152,7 @@ class UsuarioController extends Controller
             'data' => $usuarios
         ]);
     }
+
+
+    
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Empresa extends Model
 {
@@ -27,7 +28,22 @@ class Empresa extends Model
         'updated_at'      => 'datetime',
     ];
 
+    protected $appends = ['logo_url'];
+
     public $timestamps = true;
+
+    /**
+     * Obtiene la URL pública del logo (SIEMPRE protegida por token)
+     */
+   public function getLogoUrlAttribute(): ?string
+{
+    if (!$this->logo_path) {
+        return null;
+    }
+    
+    // Siempre usar la ruta API (funciona en cualquier servidor)
+    return url('/api/empresa/logo');
+}
 
     // -------------------------------------------------------------------------
     // Relaciones

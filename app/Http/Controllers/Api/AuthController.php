@@ -67,4 +67,16 @@ class AuthController extends Controller
             'empresa_id'      => $usuario->empresa_id,
         ]);
     }
+
+
+      public function revokeAllSessions(Request $request): JsonResponse
+    {
+        $usuario = $request->user();
+        
+        $this->authService->revocarTodasLasSesiones($usuario);
+        
+        return response()->json([
+            'message' => 'Todas las sesiones han sido cerradas. Debes iniciar sesión nuevamente.'
+        ]);
+    }
 }

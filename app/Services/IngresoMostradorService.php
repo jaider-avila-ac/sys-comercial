@@ -50,6 +50,7 @@ class IngresoMostradorService
 
         $payload = [
             ...$data,
+            'fecha'           => now()->toDateString(),
             'numero'          => $numero,
             'monto'           => $monto,
             'descripcion'     => $data['descripcion'] ?? "Venta mostrador {$numero}",

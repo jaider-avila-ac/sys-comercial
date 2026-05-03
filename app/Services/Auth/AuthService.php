@@ -142,4 +142,35 @@ class AuthService
             default         => [],
         };
     }
+
+
+     public function verificarTokenValido(Usuario $usuario): bool
+    {
+        return $usuario->is_activo && $usuario->tokens()->where('id', $usuario->currentAccessToken()?->id)->exists();
+    }
+
+    /**
+     * Obtener el token actual del usuario
+     */
+    public function getCurrentToken(Usuario $usuario): ?PersonalAccessToken
+    {
+        return $usuario->currentAccessToken();
+    }
+
+    /**
+     * Revocar todas las sesiones del usuario (cierre forzado en todos los dispositivos)
+     */
+    public function revocarTodasLasSesiones(Usuario $usuario): void
+    {
+        $usuario->tokens()->delete();
+        
+        $this->auditoriaService->registrar(
+            empresaId:   $usuario->empresa_id,
+            usuarioId:   $usuario->id,
+            entidad:     'usuarios',
+            accion:      'REVOKE_ALL_SESSIONS',
+            entidadId:   $usuario->id,
+            descripcion: "Se revocaron todas las sesiones del usuario: {$usuario->email}",
+        );
+    }
 }

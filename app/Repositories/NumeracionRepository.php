@@ -22,22 +22,18 @@ class NumeracionRepository
             ->get();
     }
 
-    public function crearParaEmpresa(int $empresaId): void
-    {
-        $ahora = now();
+  public function crearParaEmpresa(int $empresaId): void
+{
+    $registros = array_map(fn($tipo) => [
+        'empresa_id'  => $empresaId,
+        'tipo'        => $tipo,
+        'prefijo'     => Numeracion::PREFIJOS_DEFAULT[$tipo],
+        'consecutivo' => 0,
+        'relleno'     => 5,
+    ], Numeracion::TIPOS);
 
-        $registros = array_map(fn($tipo) => [
-            'empresa_id'  => $empresaId,
-            'tipo'        => $tipo,
-            'prefijo'     => Numeracion::PREFIJOS_DEFAULT[$tipo],
-            'consecutivo' => 0,
-            'relleno'     => 5,
-            'created_at'  => $ahora,
-            'updated_at'  => $ahora,
-        ], Numeracion::TIPOS);
-
-        Numeracion::insert($registros);
-    }
+    Numeracion::insert($registros);
+}
 
     public function incrementar(int $empresaId, string $tipo): string
     {

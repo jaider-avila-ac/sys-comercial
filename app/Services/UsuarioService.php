@@ -37,21 +37,20 @@ class UsuarioService
     }
 
     public function crear(array $data, int $empresaId): Usuario
-    {
-        $existe = $this->usuarioRepository->findByEmail($data['email']);
-
-        if ($existe) {
-            throw new HttpException(409, 'Ya existe un usuario con ese correo.');
-        }
-
-        return $this->usuarioRepository->create([
-            ...$data,
-            'empresa_id'    => $empresaId,
-            'password_hash' => Hash::make($data['password']),
-            'is_activo'     => true,
-        ]);
+{
+    $existe = $this->usuarioRepository->findByEmail($data['email']);
+    
+    if ($existe) {
+        throw new HttpException(409, 'Ya existe un usuario con ese correo.');
     }
-
+    
+    return $this->usuarioRepository->create([
+        ...$data,
+        'empresa_id'    => $empresaId,
+        'password_hash' => Hash::make($data['password']),
+        'is_activo'     => true,
+    ]);
+}
     public function actualizar(int $id, array $data, int $empresaId, bool $esSuperAdmin = false): Usuario
     {
         $this->obtener($id, $empresaId, $esSuperAdmin);
@@ -85,4 +84,27 @@ class UsuarioService
         ->orderBy('last_login_at', 'desc')
         ->get();
 }
+
+
+public function revocarTodosLosTokens(int $id, int $empresaId, bool $esSuperAdmin = false): void
+    {
+        $usuario = $this->obtener($id, $empresaId, $esSuperAdmin);
+        
+        // Eliminar todos los tokens del usuario
+        $usuario->tokens()->delete();
+    }
+
+    /**
+     * Desactivar usuario y revocar sus tokens
+     */
+    public function desactivarConRevocacion(int $id, int $empresaId, bool $esSuperAdmin = false): Usuario
+    {
+        $usuario = $this->obtener($id, $empresaId, $esSuperAdmin);
+        
+        // Eliminar todos los tokens
+        $usuario->tokens()->delete();
+        
+        // Desactivar usuario
+        return $this->usuarioRepository->update($id, ['is_activo' => false]);
+    }
 }

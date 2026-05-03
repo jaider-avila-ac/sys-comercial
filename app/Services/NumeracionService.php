@@ -52,19 +52,19 @@ class NumeracionService
     }
 
     private function asegurarNumeracionesBase(int $empresaId): void
-    {
-        foreach (Numeracion::TIPOS as $tipo) {
-            Numeracion::firstOrCreate(
-                ['empresa_id' => $empresaId, 'tipo' => $tipo],
-                [
-                    'prefijo'      => $this->prefijoPorTipo($tipo),
-                    'relleno'      => 5,
-                    'consecutivo'  => 0,  // ✅ nombre correcto de columna
-                    'updated_at'   => now(),
-                ]
-            );
-        }
+{
+    foreach (Numeracion::TIPOS as $tipo) {
+        Numeracion::firstOrCreate(
+            ['empresa_id' => $empresaId, 'tipo' => $tipo],
+            [
+                'prefijo'      => $this->prefijoPorTipo($tipo),
+                'relleno'      => 5,
+                'consecutivo'  => 0,
+                // ❌ Eliminar 'updated_at' porque la tabla no tiene ese campo
+            ]
+        );
     }
+}
 
     private function prefijoPorTipo(string $tipo): string
     {

@@ -24,27 +24,34 @@ use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\IngresoUnificadoController;
 use App\Http\Controllers\Api\EgresoUnificadoController;
-
+use App\Http\Controllers\Api\LogoController; 
+use Illuminate\Support\Facades\Log;
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/ping', fn() => ['ok' => true]);
+Route::get('/ping', function () {
+    Log::info('PING OK - Laravel está respondiendo');
+    return ['ok' => true];
+});
 
 Route::prefix('auth')->group(function () {
     Route::post('iniciar',   [AuthController::class, 'iniciar']);
     Route::post('verificar', [AuthController::class, 'verificar']);
 });
 
-Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(function () {
+Route::middleware(['auth:sanctum', ResolveEmpresaContext::class, 'check.active.token'])->group(function () {
 
 
 
-    Route::prefix('auth')->group(function () {
-        Route::post('logout', [AuthController::class, 'logout']);
-        Route::get('me',      [AuthController::class, 'me']);
-    });
+Route::prefix('auth')->group(function () {
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::get('me',      [AuthController::class, 'me']);
+    Route::post('revoke-all-sessions', [AuthController::class, 'revokeAllSessions']); // 👈 FALTA ESTA
+});
+    
 
     Route::get('empresa/me', [EmpresaController::class, 'me']);
+    Route::get('empresa/logo', [LogoController::class, 'logo']);
     Route::prefix('empresas')->group(function () {
         Route::get('/',             [EmpresaController::class, 'index']);
         Route::post('/',            [EmpresaController::class, 'store']);
@@ -58,13 +65,12 @@ Route::middleware(['auth:sanctum', ResolveEmpresaContext::class])->group(functio
     Route::prefix('usuarios')->group(function () {
     Route::get('/',                [UsuarioController::class, 'index']);
     Route::post('/',               [UsuarioController::class, 'store']);
-    // ✅ Las rutas fijas van PRIMERO
     Route::get('/activos-ahora',   [UsuarioController::class, 'activosAhora']);
-    // ✅ Las rutas con {id} van al FINAL
     Route::get('/{id}',            [UsuarioController::class, 'show']);
     Route::put('/{id}',            [UsuarioController::class, 'update']);
     Route::patch('/{id}/toggle',   [UsuarioController::class, 'toggle']);
     Route::patch('/{id}/password', [UsuarioController::class, 'changePassword']);
+    Route::post('/{id}/revocar-tokens', [UsuarioController::class, 'revocarTokens']);
     Route::get('/{id}/auditoria',  [AuditoriaController::class, 'porUsuario']);
     Route::get('/{id}/sesiones',   [SesionController::class,    'porUsuario']);
 });

@@ -42,7 +42,6 @@ class IngresoMostradorController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'fecha'          => ['required', 'date'],
             'descripcion'    => ['nullable', 'string', 'max:255'],
             'item_id'        => ['nullable', 'integer'],
             'cantidad'       => ['required', 'integer', 'min:1'],
