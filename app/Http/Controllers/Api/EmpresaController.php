@@ -66,19 +66,34 @@ class EmpresaController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'nombre'    => ['sometimes', 'string', 'max:150'],
-            'nit'       => ['sometimes', 'string', 'max:30'],
-            'email'     => ['sometimes', 'nullable', 'email', 'max:120'],
-            'telefono'  => ['sometimes', 'nullable', 'string', 'max:40'],
-            'direccion' => ['sometimes', 'nullable', 'string', 'max:180'],
-            'is_activa' => ['sometimes', 'boolean'],
+            'nombre'     => ['sometimes', 'string', 'max:150'],
+            'nit'        => ['sometimes', 'string', 'max:30'],
+            'matricula'  => ['sometimes', 'nullable', 'string', 'max:80'],
+            'email'      => ['sometimes', 'nullable', 'email', 'max:120'],
+            'pagina_web' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'telefono'   => ['sometimes', 'nullable', 'string', 'max:40'],
+            'direccion'  => ['sometimes', 'nullable', 'string', 'max:180'],
+            'is_activa'  => ['sometimes', 'boolean'],
         ]);
 
         $empresa = $this->empresaService->actualizar($id, $data);
-        
+
         return response()->json([
             'empresa' => $empresa
         ]);
+    }
+
+    // PUT /api/empresa/tema
+    public function guardarTema(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'doc_tema'  => ['required', 'string', 'in:1,2,3,4'],
+            'doc_color' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        $empresa = $this->empresaService->actualizar($request->empresa_id_ctx, $data);
+
+        return response()->json(['empresa' => $empresa]);
     }
 
     // DELETE /api/empresas/{id}

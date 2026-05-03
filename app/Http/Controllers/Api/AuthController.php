@@ -14,34 +14,31 @@ class AuthController extends Controller
         private readonly AuthService $authService,
     ) {}
 
-    // POST /api/auth/iniciar
+    // POST /api/auth/iniciar  — solo recibe el correo
     public function iniciar(Request $request): JsonResponse
     {
         $data = $request->validate([
             'email' => ['required', 'email'],
         ]);
 
-        $preToken = $this->authService->iniciarSesion($data['email']);
+        $sessionToken = $this->authService->iniciarSesion($data['email']);
 
         return response()->json([
-            'message'   => 'Token generado. Revisa tu correo.',
-            'pre_token' => $preToken, // TODO: eliminar en producción
+            'session_token' => $sessionToken,
         ]);
     }
 
-    // POST /api/auth/verificar
+    // POST /api/auth/verificar  — solo recibe session_token + password
     public function verificar(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email'    => ['required', 'email'],
-            'token'    => ['required', 'string', 'size:6'],
-            'password' => ['required', 'string'],
+            'session_token' => ['required', 'string', 'uuid'],
+            'password'      => ['required', 'string'],
         ]);
 
         $result = $this->authService->verificarSesion(
-            email:    $data['email'],
-            preToken: $data['token'],
-            password: $data['password'],
+            sessionToken: $data['session_token'],
+            password:     $data['password'],
         );
 
         return response()->json($result);

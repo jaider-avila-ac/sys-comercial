@@ -50,8 +50,9 @@ Route::prefix('auth')->group(function () {
 });
     
 
-    Route::get('empresa/me', [EmpresaController::class, 'me']);
-    Route::get('empresa/logo', [LogoController::class, 'logo']);
+    Route::get('empresa/me',    [EmpresaController::class, 'me']);
+    Route::put('empresa/tema',  [EmpresaController::class, 'guardarTema']);
+    Route::get('empresa/logo',  [LogoController::class, 'logo']);
     Route::prefix('empresas')->group(function () {
         Route::get('/',             [EmpresaController::class, 'index']);
         Route::post('/',            [EmpresaController::class, 'store']);

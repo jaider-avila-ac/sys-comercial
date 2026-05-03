@@ -12,12 +12,16 @@ class Empresa extends Model
     protected $fillable = [
         'nombre',
         'nit',
+        'matricula',
         'email',
+        'pagina_web',
         'telefono',
         'direccion',
         'logo_path',
         'logo_mime',
         'logo_updated_at',
+        'doc_tema',
+        'doc_color',
         'is_activa',
     ];
 

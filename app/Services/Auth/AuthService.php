@@ -15,7 +15,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class AuthService
 {
     private const TOKEN_TTL_MINUTES = 5;
-    private const CACHE_PREFIX      = 'auth_pretoken:';
+    private const CACHE_PREFIX      = 'auth_session:';
 
     public function __construct(
         private readonly UsuarioRepository $usuarioRepository,
@@ -35,24 +35,24 @@ class AuthService
             throw new HttpException(403, 'Usuario inactivo. Contacte al administrador.');
         }
 
-        $preToken = strtoupper(Str::random(6));
+        $sessionToken = (string) Str::uuid();
 
         Cache::put(
-            self::CACHE_PREFIX . $email,
-            $preToken,
+            self::CACHE_PREFIX . $sessionToken,
+            $email,
             now()->addMinutes(self::TOKEN_TTL_MINUTES)
         );
 
-        return $preToken;
+        return $sessionToken;
     }
 
-    public function verificarSesion(string $email, string $preToken, string $password): array
+    public function verificarSesion(string $sessionToken, string $password): array
     {
-        $cacheKey      = self::CACHE_PREFIX . $email;
-        $tokenGuardado = Cache::get($cacheKey);
+        $cacheKey = self::CACHE_PREFIX . $sessionToken;
+        $email    = Cache::get($cacheKey);
 
-        if (! $tokenGuardado || strtoupper($preToken) !== $tokenGuardado) {
-            throw new HttpException(401, 'Token inválido o expirado.');
+        if (! $email) {
+            throw new HttpException(401, 'Sesión inválida o expirada. Vuelve a ingresar tu correo.');
         }
 
         $usuario = $this->usuarioRepository->findByEmail($email);
@@ -68,7 +68,7 @@ class AuthService
                 request()->ip() ?? '',
                 request()->userAgent() ?? '',
             );
-            throw new HttpException(401, 'Credenciales inválidas.');
+            throw new HttpException(401, 'Contraseña incorrecta.');
         }
 
         Cache::forget($cacheKey);
