@@ -92,10 +92,50 @@ class ItemService
         return $this->itemRepository->toggleActivo($id);
     }
 
-    public function eliminar(int $id, int $empresaId): void
+    public function eliminar(int $id, int $empresaId, int $usuarioId): void
     {
-        $this->obtener($id, $empresaId);
-        $this->itemRepository->delete($id);
+        $item = $this->obtener($id, $empresaId);
+
+        // Bloquear si está en facturas activas (no anuladas)
+        $enFacturasActivas = $item->facturaLineas()
+            ->whereHas('factura', fn ($q) => $q->where('estado', '!=', 'ANULADA'))
+            ->exists();
+
+        if ($enFacturasActivas) {
+            throw new HttpException(
+                422,
+                'Este ítem se ha utilizado en facturas activas y no puede eliminarse. Solo puede desactivarse.'
+            );
+        }
+
+        DB::transaction(function () use ($id, $empresaId, $usuarioId, $item) {
+            // Anular todas las compras no anuladas que referencian este ítem
+            $compraIds = DB::table('compra_items')
+                ->where('item_id', $id)
+                ->pluck('compra_id')
+                ->unique();
+
+            foreach ($compraIds as $compraId) {
+                try {
+                    $compra = $this->compraService->obtener($compraId, $empresaId);
+                    if ($compra->estado !== 'ANULADA') {
+                        $this->compraService->anular($compraId, $empresaId, $usuarioId);
+                    }
+                } catch (\Throwable) {
+                    // Compra de otra empresa o no encontrada — se omite
+                }
+            }
+
+            // Eliminar referencias FK antes de borrar el ítem
+            DB::table('compra_items')->where('item_id', $id)->delete();
+            DB::table('inventario_movimientos')->where('item_id', $id)->delete();
+
+            if ($item->inventario) {
+                $item->inventario->delete();
+            }
+
+            $this->itemRepository->delete($id);
+        });
     }
 
     public function crear(array $data, int $empresaId, ?int $usuarioId = null, ?UploadedFile $archivo = null): array

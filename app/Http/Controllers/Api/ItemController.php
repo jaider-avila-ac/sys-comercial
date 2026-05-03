@@ -112,7 +112,7 @@ class ItemController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $this->itemService->eliminar($id, $request->empresa_id_ctx);
+        $this->itemService->eliminar($id, $request->empresa_id_ctx, $request->user()->id);
 
         return response()->json([
             'message' => 'Ítem eliminado correctamente.',
