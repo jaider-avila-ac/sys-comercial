@@ -36,7 +36,7 @@ class CompraRepository
             ->orderByDesc('created_at')
             ->paginate($perPage);
     }
-
+//nuevo arhivo
     public function allByEmpresa(int $empresaId): Collection
     {
         return Compra::where('empresa_id', $empresaId)
