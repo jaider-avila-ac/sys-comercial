@@ -176,6 +176,7 @@ class FacturaService
 
         $factura = $this->crear([
             'cliente_id'    => $cotizacion->cliente_id,
+            'tipo'          => $cotizacion->tipo ?? 'NORMAL',
             'fecha'         => now()->toDateString(),
             'notas'         => $cotizacion->notas,
             'lineas'        => $lineas,
@@ -312,6 +313,10 @@ class FacturaService
 
         foreach ($lineas as $l) {
 
+            if (! isset($l['item_id']) || $l['item_id'] === null) {
+                continue;
+            }
+
             $item = Item::where('empresa_id', $empresaId)->find($l['item_id']);
 
             if (! $item) {
@@ -341,6 +346,7 @@ class FacturaService
             'empresa_id' => $empresaId,
             'usuario_id' => $usuarioId,
             'cliente_id' => $data['cliente_id'],
+            'tipo'       => $data['tipo'] ?? 'NORMAL',
             'fecha'      => $data['fecha'],
             'notas'      => $data['notas'] ?? null,
             ...$totales,

@@ -61,14 +61,17 @@ class FacturaController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $isLibre = $request->input('tipo') === 'LIBRE';
+
         $data = $request->validate([
             'cliente_id'    => ['required', 'integer'],
             'cotizacion_id' => ['nullable', 'integer'],
+            'tipo'          => ['nullable', 'string', 'in:NORMAL,LIBRE'],
             'fecha'         => ['required', 'date'],
             'notas'         => ['nullable', 'string'],
             'lineas'        => ['required', 'array', 'min:1'],
 
-            'lineas.*.item_id'            => ['required', 'integer'],
+            'lineas.*.item_id'            => $isLibre ? ['nullable', 'integer'] : ['required', 'integer'],
             'lineas.*.descripcion_manual' => ['required', 'string', 'max:255'],
             'lineas.*.cantidad'           => ['required', 'integer', 'min:1'],
             'lineas.*.valor_unitario'     => ['required', 'numeric', 'min:0'],
@@ -90,13 +93,16 @@ class FacturaController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
+        $factura = $this->facturaService->obtener($id, $request->empresa_id_ctx);
+        $isLibre = ($factura->tipo ?? 'NORMAL') === 'LIBRE';
+
         $data = $request->validate([
             'cliente_id'    => ['sometimes', 'integer'],
             'fecha'         => ['sometimes', 'date'],
             'notas'         => ['nullable', 'string'],
             'lineas'        => ['sometimes', 'array', 'min:1'],
 
-            'lineas.*.item_id'            => ['required_with:lineas', 'integer'],
+            'lineas.*.item_id'            => $isLibre ? ['nullable', 'integer'] : ['required_with:lineas', 'integer'],
             'lineas.*.descripcion_manual' => ['required_with:lineas', 'string', 'max:255'],
             'lineas.*.cantidad'           => ['required_with:lineas', 'integer', 'min:1'],
             'lineas.*.valor_unitario'     => ['required_with:lineas', 'numeric', 'min:0'],

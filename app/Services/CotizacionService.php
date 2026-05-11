@@ -124,6 +124,7 @@ class CotizacionService
             'empresa_id'        => $empresaId,
             'usuario_id'        => $usuarioId,
             'cliente_id'        => $data['cliente_id'],
+            'tipo'              => $data['tipo'] ?? 'NORMAL',
             'fecha'             => $data['fecha'],
             'fecha_vencimiento' => $data['fecha_vencimiento'] ?? null,
             'notas'             => $data['notas'] ?? null,

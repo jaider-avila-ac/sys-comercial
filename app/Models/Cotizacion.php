@@ -13,6 +13,7 @@ class Cotizacion extends Model
         'cliente_id',
         'usuario_id',
         'numero',
+        'tipo',
         'estado',
         'fecha',
         'fecha_vencimiento',

@@ -14,6 +14,7 @@ class Factura extends Model
         'usuario_id',
         'cotizacion_id',
         'numero',
+        'tipo',
         'estado',
         'fecha',
         'notas',

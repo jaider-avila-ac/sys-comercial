@@ -40,12 +40,13 @@ class CotizacionController extends Controller
     {
         $data = $request->validate([
             'cliente_id'                  => ['required', 'integer'],
+            'tipo'                        => ['nullable', 'string', 'in:NORMAL,LIBRE'],
             'fecha'                       => ['required', 'date'],
             'fecha_vencimiento'           => ['nullable', 'date', 'after_or_equal:fecha'],
             'notas'                       => ['nullable', 'string'],
             'lineas'                      => ['required', 'array', 'min:1'],
             'lineas.*.item_id'            => ['nullable', 'integer'],
-            'lineas.*.descripcion_manual' => ['nullable', 'string', 'max:255'],
+            'lineas.*.descripcion_manual' => ['required', 'string', 'max:255'],
             'lineas.*.cantidad'           => ['required', 'integer', 'min:1'],
             'lineas.*.valor_unitario'     => ['required', 'numeric', 'min:0'],
             'lineas.*.descuento'          => ['nullable', 'numeric', 'min:0'],
@@ -65,12 +66,13 @@ class CotizacionController extends Controller
     {
         $data = $request->validate([
             'cliente_id'                  => ['sometimes', 'integer'],
+            'tipo'                        => ['sometimes', 'string', 'in:NORMAL,LIBRE'],
             'fecha'                       => ['sometimes', 'date'],
             'fecha_vencimiento'           => ['nullable', 'date'],
             'notas'                       => ['nullable', 'string'],
             'lineas'                      => ['sometimes', 'array', 'min:1'],
             'lineas.*.item_id'            => ['nullable', 'integer'],
-            'lineas.*.descripcion_manual' => ['nullable', 'string', 'max:255'],
+            'lineas.*.descripcion_manual' => ['required_with:lineas', 'string', 'max:255'],
             'lineas.*.cantidad'           => ['required_with:lineas', 'integer', 'min:1'],
             'lineas.*.valor_unitario'     => ['required_with:lineas', 'numeric', 'min:0'],
             'lineas.*.descuento'          => ['nullable', 'numeric', 'min:0'],

@@ -9,7 +9,8 @@ class LineaCalculoService
 {
     public function calcularLinea(array $linea): array
     {
-        $itemId            = $this->toInt($linea['item_id'] ?? null);
+        $rawItemId         = $linea['item_id'] ?? null;
+        $itemId            = ($rawItemId !== null && $rawItemId !== '') ? $this->toInt($rawItemId) : null;
         $descripcionManual = trim((string) ($linea['descripcion_manual'] ?? ''));
         $cantidad          = $this->toInt($linea['cantidad'] ?? 1);
         $valorUnitario     = $this->toFloat($linea['valor_unitario'] ?? 0);
@@ -76,15 +77,13 @@ class LineaCalculoService
         float $ivaPct
     ): void {
 
-        if (! $itemId || $itemId <= 0) {
-            throw new HttpException(422, 'Cada línea debe tener un item_id válido.');
-        }
-
-        // 🔥 NUEVA VALIDACIÓN (PUNTO 4)
-        $item = Item::find($itemId);
-
-        if (! $item) {
-            throw new HttpException(422, "El ítem {$itemId} no existe.");
+        if ($itemId !== null) {
+            if ($itemId <= 0) {
+                throw new HttpException(422, 'El item_id debe ser un valor positivo.');
+            }
+            if (! Item::find($itemId)) {
+                throw new HttpException(422, "El ítem {$itemId} no existe.");
+            }
         }
 
         if ($descripcion === '') {
@@ -124,4 +123,5 @@ class LineaCalculoService
     {
         return (int) $value;
     }
+
 }
