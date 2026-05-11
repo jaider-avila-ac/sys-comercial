@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\CajaMovimiento;
+use App\Models\Compra;
 use App\Models\EgresoCompra;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -75,7 +76,33 @@ class EgresoCompraRepository
     public function anular(int $id, int $empresaId): EgresoCompra
     {
         return DB::transaction(function () use ($id, $empresaId) {
-            $egreso = EgresoCompra::where('empresa_id', $empresaId)->findOrFail($id);
+            $egreso = EgresoCompra::where('empresa_id', $empresaId)
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            // Recalcular saldo de la compra si existe y no está ANULADA
+            if ($egreso->compra_id) {
+                $compra = Compra::where('empresa_id', $empresaId)
+                    ->lockForUpdate()
+                    ->find($egreso->compra_id);
+
+                if ($compra && $compra->estado !== 'ANULADA') {
+                    $pagado = EgresoCompra::where('compra_id', $compra->id)
+                        ->where('estado', 'ACTIVO')
+                        ->where('id', '!=', $id)
+                        ->sum('monto');
+
+                    $nuevoSaldo  = round(max(0, (float) $compra->total - (float) $pagado), 2);
+                    $nuevoEstado = $nuevoSaldo <= 0
+                        ? 'PAGADA'
+                        : ((float) $pagado > 0 ? 'PARCIAL' : 'PENDIENTE');
+
+                    $compra->update([
+                        'saldo_pendiente' => $nuevoSaldo,
+                        'estado'          => $nuevoEstado,
+                    ]);
+                }
+            }
 
             CajaMovimiento::where('origen_tipo', 'EGRESO_COMPRA')
                 ->where('origen_id', $id)

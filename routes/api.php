@@ -24,7 +24,8 @@ use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\IngresoUnificadoController;
 use App\Http\Controllers\Api\EgresoUnificadoController;
-use App\Http\Controllers\Api\LogoController; 
+use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\LogoController;
 use Illuminate\Support\Facades\Log;
 
 use Illuminate\Support\Facades\Route;
@@ -159,10 +160,11 @@ Route::prefix('egresos')->group(function () {
 });
 
     Route::prefix('egresos/compras')->group(function () {
-        Route::get('/',             [EgresoCompraController::class, 'index']);
-        Route::post('/',            [EgresoCompraController::class, 'store']);
-        Route::get('/{id}',         [EgresoCompraController::class, 'show']);
-        Route::post('/{id}/anular', [EgresoCompraController::class, 'anular']);
+        Route::get('/',                          [EgresoCompraController::class, 'index']);
+        Route::post('/',                         [EgresoCompraController::class, 'store']);
+        Route::get('/{id}',                      [EgresoCompraController::class, 'show']);
+        Route::post('/{id}/anular',              [EgresoCompraController::class, 'anular']);
+        Route::get('/por-compra/{compraId}',     [EgresoCompraController::class, 'porCompra']);
     });
 
     Route::prefix('compras')->group(function () {
@@ -203,15 +205,6 @@ Route::post('/stock/verificar', [StockController::class, 'verificar']);
         Route::get('usuario/{id}',   [SesionController::class, 'porUsuario']);
     });
 
-    Route::prefix('egresos/compras')->group(function () {
-    Route::get('/',             [EgresoCompraController::class, 'index']);
-    Route::post('/',            [EgresoCompraController::class, 'store']);
-    Route::get('/{id}',         [EgresoCompraController::class, 'show']);
-    Route::post('/{id}/anular', [EgresoCompraController::class, 'anular']);
-    // 👇 AGREGAR ESTA LÍNEA
-    Route::get('/por-compra/{compraId}', [EgresoCompraController::class, 'porCompra']);
-});
-
     // Dashboard empresa (cualquier rol autenticado)
     Route::get('dashboard', [DashboardController::class, 'index']);
 
@@ -222,4 +215,7 @@ Route::post('/stock/verificar', [StockController::class, 'verificar']);
     Route::get('brevo/config',  [BrevoConfigController::class, 'show']);
     Route::post('brevo/config',  [BrevoConfigController::class, 'upsert']);
     Route::post('brevo/test',    [BrevoConfigController::class, 'test']);
+
+    // Solo SUPER_ADMIN
+    Route::post('admin/recalcular-todo', [AdminController::class, 'recalcularTodo']);
 });

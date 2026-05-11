@@ -7,11 +7,13 @@ use App\Repositories\CompraRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use App\Services\NumeracionService;
 
 class CompraService
 {
     public function __construct(
-        private readonly CompraRepository $compraRepository,
+        private readonly CompraRepository  $compraRepository,
+        private readonly NumeracionService $numeracionService,
     ) {}
 
     public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
@@ -77,18 +79,12 @@ class CompraService
     public function confirmar(int $id, int $empresaId, int $usuarioId, ?array $archivoData = null): Compra
     {
         $compra = $this->obtener($id, $empresaId);
-        
+
         if ($compra->numero !== null) {
             throw new HttpException(422, 'La compra ya ha sido confirmada.');
         }
 
-        $ultimaCompra = Compra::where('empresa_id', $empresaId)
-            ->whereNotNull('numero')
-            ->orderBy('id', 'desc')
-            ->first();
-        
-        $consecutivo = $ultimaCompra ? intval(substr($ultimaCompra->numero, -6)) + 1 : 1;
-        $numero = 'COMP-' . str_pad($consecutivo, 6, '0', STR_PAD_LEFT);
+        $numero = $this->numeracionService->siguienteNumero($empresaId, 'COM');
 
         return $this->compraRepository->confirmar($id, $numero, $usuarioId, $archivoData);
     }
@@ -114,45 +110,6 @@ class CompraService
             'medio_pago'  => $pagoData['medio_pago'],
             'notas'       => $pagoData['notas'] ?? null,
         ];
-
-        return $this->compraRepository->registrarPago($id, $monto, $empresaId, $usuarioId, $egresoData);
-    }
-
-    public function registrarPagoConArchivo(
-        int $id, 
-        float $monto, 
-        string $fecha, 
-        string $medioPago, 
-        string $descripcion, 
-        ?string $notas,
-        int $empresaId, 
-        int $usuarioId,
-        ?array $archivoData
-    ): Compra {
-        $compra = $this->obtener($id, $empresaId);
-        
-        if (in_array($compra->estado, ['PAGADA', 'ANULADA'])) {
-            throw new HttpException(422, 'No se puede registrar pagos en compras pagadas o anuladas.');
-        }
-
-        $saldoActual = (float) $compra->saldo_pendiente;
-        
-        if ($monto > $saldoActual) {
-            throw new HttpException(422, 'El monto del pago no puede ser mayor al saldo pendiente.');
-        }
-
-        $egresoData = [
-            'fecha'          => $fecha,
-            'descripcion'    => $descripcion,
-            'medio_pago'     => $medioPago,
-            'notas'          => $notas,
-        ];
-
-        if ($archivoData) {
-            $egresoData['archivo_path'] = $archivoData['path'];
-            $egresoData['archivo_mime'] = $archivoData['mime'];
-            $egresoData['archivo_nombre'] = $archivoData['nombre'];
-        }
 
         return $this->compraRepository->registrarPago($id, $monto, $empresaId, $usuarioId, $egresoData);
     }

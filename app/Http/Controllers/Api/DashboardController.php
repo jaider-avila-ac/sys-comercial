@@ -8,6 +8,7 @@ use App\Models\Factura;
 use App\Models\IngresoPago;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -60,8 +61,18 @@ class DashboardController extends Controller
             ];
         });
 
+        $cuentasPorPagar = DB::table('compras')
+            ->where('empresa_id', $empresaId)
+            ->whereNotNull('numero')
+            ->whereIn('estado', ['PENDIENTE', 'PARCIAL'])
+            ->sum('saldo_pendiente');
+
+        $resumenArray = array_merge($resumen->toArray(), [
+            'cuentas_por_pagar' => round((float) $cuentasPorPagar, 2),
+        ]);
+
         return response()->json([
-            'resumen'          => $resumen,
+            'resumen'          => $resumenArray,
             'ultimas_facturas' => $ultimasFacturas,
             'ultimos_pagos'    => $pagosFormateados,
         ]);

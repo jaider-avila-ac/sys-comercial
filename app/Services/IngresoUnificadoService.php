@@ -11,9 +11,10 @@ class IngresoUnificadoService
     public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
         $search = $filters['search'] ?? '';
-        $tipo   = $filters['tipo'] ?? ''; 
-        $desde = $filters['desde'] ?? null;
-        $hasta = $filters['hasta'] ?? null;
+        $tipo   = $filters['tipo']   ?? '';
+        $estado = $filters['estado'] ?? '';
+        $desde  = $filters['desde']  ?? null;
+        $hasta  = $filters['hasta']  ?? null;
 
         // Iniciar builder para la unión
         $union = null;
@@ -22,7 +23,6 @@ class IngresoUnificadoService
         if (!$tipo || $tipo === 'PAGO_FACTURA') {
             $pagos = DB::table('ingresos_pagos')
                 ->where('ingresos_pagos.empresa_id', $empresaId)
-                ->where('ingresos_pagos.estado', 'ACTIVO')
                 ->leftJoin('pago_aplicaciones', 'ingresos_pagos.id', '=', 'pago_aplicaciones.ingreso_pago_id')
                 ->leftJoin('facturas', 'pago_aplicaciones.factura_id', '=', 'facturas.id')
                 ->leftJoin('clientes', 'facturas.cliente_id', '=', 'clientes.id')
@@ -36,7 +36,8 @@ class IngresoUnificadoService
                     'ingresos_pagos.referencia',
                     'ingresos_pagos.notas',
                     'clientes.nombre_razon_social as cliente_nombre',
-                    'ingresos_pagos.created_at as orden'
+                    'ingresos_pagos.created_at as orden',
+                    'ingresos_pagos.estado'
                 );
             $union = $pagos;
         }
@@ -45,7 +46,6 @@ class IngresoUnificadoService
         if (!$tipo || $tipo === 'VENTA_MOSTRADOR') {
             $mostrador = DB::table('ingresos_mostrador')
                 ->where('empresa_id', $empresaId)
-                ->where('estado', 'ACTIVO')
                 ->select(
                     DB::raw("CAST(id AS CHAR) as id"),
                     'numero as recibo',
@@ -56,7 +56,8 @@ class IngresoUnificadoService
                     'referencia',
                     'notas',
                     DB::raw('NULL as cliente_nombre'),
-                    'created_at as orden'
+                    'created_at as orden',
+                    'estado'
                 );
             
             if ($union === null) {
@@ -70,7 +71,6 @@ class IngresoUnificadoService
         if (!$tipo || $tipo === 'INGRESO_MANUAL') {
             $manuales = DB::table('ingresos_manuales')
                 ->where('empresa_id', $empresaId)
-                ->where('estado', 'ACTIVO')
                 ->select(
                     DB::raw("CAST(id AS CHAR) as id"),
                     DB::raw("CONCAT('MAN-', id) as recibo"),
@@ -81,7 +81,8 @@ class IngresoUnificadoService
                     DB::raw("NULL as referencia"),
                     'notas',
                     DB::raw('NULL as cliente_nombre'),
-                    'created_at as orden'
+                    'created_at as orden',
+                    'estado'
                 );
             
             if ($union === null) {
@@ -95,28 +96,32 @@ class IngresoUnificadoService
         if ($union === null) {
             return new Paginator(collect(), 0, $perPage, 1, []);
         }
-        
-        // ✅ Filtros de fecha
+
+        // Envolver en subquery para poder filtrar y ordenar sobre el UNION completo
+        $query = DB::query()->fromSub($union, 'ingresos_union');
+
+        if ($estado) {
+            $query->where('estado', $estado);
+        }
         if ($desde) {
-            $union->whereDate('fecha', '>=', $desde);
+            $query->whereDate('fecha', '>=', $desde);
         }
         if ($hasta) {
-            $union->whereDate('fecha', '<=', $hasta);
+            $query->whereDate('fecha', '<=', $hasta);
         }
         if ($search) {
-            $union->where(function ($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('recibo', 'like', "%{$search}%")
                   ->orWhere('notas', 'like', "%{$search}%")
                   ->orWhere('referencia', 'like', "%{$search}%")
                   ->orWhere('cliente_nombre', 'like', "%{$search}%");
             });
         }
-        
-        // Ordenar por fecha de creación (más reciente primero)
-        $union->orderBy('orden', 'desc');
-        
+
+        $query->orderBy('orden', 'desc');
+
         // Obtener resultados
-        $results = $union->get();
+        $results = $query->get();
         
         // Transformar
         $items = $results->map(function ($item) {
@@ -147,6 +152,7 @@ class IngresoUnificadoService
                 'referencia' => $item->referencia,
                 'notas' => $item->notas,
                 'cliente_nombre' => $concepto,
+                'estado' => $item->estado ?? 'ACTIVO',
             ];
         });
         

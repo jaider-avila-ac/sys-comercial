@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Models\Factura;
+use App\Models\IngresoPago;
 use App\Models\Inventario;
 use App\Models\InventarioMovimiento;
 use App\Models\Item;
 use App\Models\Cliente;
 use App\Repositories\CotizacionRepository;
 use App\Repositories\FacturaRepository;
+use App\Repositories\PagoRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -20,6 +22,7 @@ class FacturaService
         private readonly CotizacionRepository $cotizacionRepository,
         private readonly LineaCalculoService $calculoService,
         private readonly NumeracionService $numeracionService,
+        private readonly PagoRepository $pagoRepository,
     ) {}
 
     public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
@@ -123,15 +126,28 @@ class FacturaService
                 throw new HttpException(409, 'La factura ya está anulada.');
             }
 
-            if ((float) $factura->total_pagado > 0) {
-                throw new HttpException(409, 'No se puede anular una factura con pagos registrados.');
+            // Anular todos los pagos activos vinculados a esta factura
+            $pagosActivos = IngresoPago::whereHas('aplicaciones', fn($q) => $q->where('factura_id', $id))
+                ->where('empresa_id', $empresaId)
+                ->where('estado', 'ACTIVO')
+                ->pluck('id');
+
+            foreach ($pagosActivos as $pagoId) {
+                $this->pagoRepository->anular($pagoId, $empresaId);
             }
 
             if ($factura->estado === 'EMITIDA') {
                 $this->procesarEntradaInventario($factura, $empresaId);
             }
 
-            return $this->facturaRepository->cambiarEstado($id, 'ANULADA');
+            $facturaAnulada = $this->facturaRepository->cambiarEstado($id, 'ANULADA');
+
+            // Si la factura vino de una cotización, revertirla a EMITIDA para que pueda facturarse de nuevo
+            if ($factura->cotizacion_id) {
+                $this->cotizacionRepository->cambiarEstado($factura->cotizacion_id, 'EMITIDA');
+            }
+
+            return $facturaAnulada;
         });
     }
 

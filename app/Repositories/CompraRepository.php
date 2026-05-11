@@ -198,31 +198,35 @@ class CompraRepository
                 ->lockForUpdate()
                 ->findOrFail($id);
 
-            foreach ($compra->items as $compraItem) {
-                $item = $compraItem->item;
-                if (! $item || ! $item->controla_inventario) continue;
+            // Solo revertir inventario si la compra fue confirmada (tiene numero).
+            // Una compra sin numero nunca tuvo inventario agregado.
+            if ($compra->numero !== null) {
+                foreach ($compra->items as $compraItem) {
+                    $item = $compraItem->item;
+                    if (! $item || ! $item->controla_inventario) continue;
 
-                $inventario = Inventario::where('empresa_id', $empresaId)
-                    ->where('item_id', $item->id)
-                    ->lockForUpdate()
-                    ->first();
+                    $inventario = Inventario::where('empresa_id', $empresaId)
+                        ->where('item_id', $item->id)
+                        ->lockForUpdate()
+                        ->first();
 
-                if ($inventario) {
-                    $nuevasUnidades = max(0, $inventario->unidades_actuales - $compraItem->cantidad);
-                    $inventario->update(['unidades_actuales' => $nuevasUnidades]);
+                    if ($inventario) {
+                        $nuevasUnidades = max(0, $inventario->unidades_actuales - $compraItem->cantidad);
+                        $inventario->update(['unidades_actuales' => $nuevasUnidades]);
 
-                    InventarioMovimiento::create([
-                        'empresa_id'           => $empresaId,
-                        'item_id'              => $item->id,
-                        'usuario_id'           => $usuarioId,
-                        'tipo'                 => 'SALIDA',
-                        'motivo'               => "Anulación compra {$compra->numero}",
-                        'referencia_tipo'      => 'COMPRA',
-                        'referencia_id'        => $compra->id,
-                        'unidades'             => $compraItem->cantidad,
-                        'unidades_resultantes' => $nuevasUnidades,
-                        'ocurrido_en'          => now(),
-                    ]);
+                        InventarioMovimiento::create([
+                            'empresa_id'           => $empresaId,
+                            'item_id'              => $item->id,
+                            'usuario_id'           => $usuarioId,
+                            'tipo'                 => 'SALIDA',
+                            'motivo'               => "Anulación compra {$compra->numero}",
+                            'referencia_tipo'      => 'COMPRA',
+                            'referencia_id'        => $compra->id,
+                            'unidades'             => $compraItem->cantidad,
+                            'unidades_resultantes' => $nuevasUnidades,
+                            'ocurrido_en'          => now(),
+                        ]);
+                    }
                 }
             }
 

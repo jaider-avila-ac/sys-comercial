@@ -17,6 +17,7 @@ class FacturaRepository
         $clienteId = $filters['cliente_id'] ?? null;
         $desde     = $filters['desde'] ?? null;
         $hasta     = $filters['hasta'] ?? null;
+        $pendiente = $filters['pendiente'] ?? null;
 
         return Factura::where('empresa_id', $empresaId)
             ->with(['cliente', 'usuario'])
@@ -32,6 +33,7 @@ class FacturaRepository
             ->when($clienteId, fn($q) => $q->where('cliente_id', $clienteId))
             ->when($desde, fn($q) => $q->whereDate('fecha', '>=', $desde))
             ->when($hasta, fn($q) => $q->whereDate('fecha', '<=', $hasta))
+            ->when($pendiente === 'true' || $pendiente === true, fn($q) => $q->where('saldo', '>', 0))
             ->orderByDesc('created_at')
             ->paginate($perPage);
     }

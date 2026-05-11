@@ -69,6 +69,12 @@ class ReporteService
 
         $balanceReal = $totalIngresos - $totalEgresos;
 
+        $cuentasPorPagar = DB::table('compras')
+            ->where('empresa_id', $empresaId)
+            ->whereNotNull('numero')
+            ->whereIn('estado', ['PENDIENTE', 'PARCIAL'])
+            ->sum('saldo_pendiente');
+
         return [
             'total_facturado' => round((float) $totalesFacturas->total_facturado, 2),
             'total_cobrado' => round((float) $totalesFacturas->total_cobrado, 2),
@@ -83,6 +89,7 @@ class ReporteService
             'compras_contado' => round((float) $comprasContado, 2),
             'credito_pendiente' => round((float) $totalesFacturas->saldo_pendiente, 2),
             'balance_real' => round((float) $balanceReal, 2),
+            'cuentas_por_pagar' => round((float) $cuentasPorPagar, 2),
             'resumen' => [
                 'desde' => $desde,
                 'hasta' => $hasta,

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\FacturaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class FacturaController extends Controller
 {
@@ -21,13 +22,34 @@ class FacturaController extends Controller
             'cliente_id' => $request->query('cliente_id'),
             'desde'      => $request->query('desde'),
             'hasta'      => $request->query('hasta'),
+            'pendiente'  => $request->query('pendiente'),
         ];
 
-        $perPage = (int) $request->query('per_page', 20);
+        $perPage  = (int) $request->query('per_page', 20);
+        $empresaId = $request->empresa_id_ctx;
 
-        return response()->json(
-            $this->facturaService->listar($request->empresa_id_ctx, $filters, $perPage)
-        );
+        $paginado = $this->facturaService->listar($empresaId, $filters, $perPage);
+
+        $totales = DB::table('facturas')
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', ['EMITIDA', 'BORRADOR'])
+            ->selectRaw("
+                COUNT(*) as total_activas,
+                SUM(CASE WHEN estado = 'EMITIDA' THEN 1 ELSE 0 END) as total_emitidas,
+                SUM(CASE WHEN estado = 'BORRADOR' THEN 1 ELSE 0 END) as total_borrador,
+                COALESCE(SUM(saldo), 0) as total_saldo_pendiente,
+                COALESCE(SUM(total_pagado), 0) as total_pagado
+            ")
+            ->first();
+
+        return response()->json([
+            'data'         => $paginado->items(),
+            'current_page' => $paginado->currentPage(),
+            'last_page'    => $paginado->lastPage(),
+            'per_page'     => $paginado->perPage(),
+            'total'        => $paginado->total(),
+            'totales'      => $totales,
+        ]);
     }
 
     public function show(Request $request, int $id): JsonResponse

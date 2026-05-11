@@ -6,7 +6,6 @@ use App\Models\CajaMovimiento;
 use App\Models\Factura;
 use App\Models\IngresoPago;
 use App\Models\PagoAplicacion;
-use App\Services\ResumenService; 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -105,8 +104,6 @@ class PagoRepository
                 'created_at'  => now(),
             ]);
 
-            app(ResumenService::class)->recalcular($empresaId);
-            
             return $pago->fresh(['aplicaciones.factura', 'usuario']);
         });
     }
@@ -136,8 +133,6 @@ class PagoRepository
 
             $pago->update(['estado' => 'ANULADO']);
 
-            app(ResumenService::class)->recalcular($empresaId);
-            
             return $pago->fresh(['aplicaciones.factura']);
         });
     }

@@ -22,6 +22,7 @@ class IngresoUnificadoController extends Controller
         $filters = [
             'search' => $request->query('search'),
             'tipo'   => $request->query('tipo'),
+            'estado' => $request->query('estado'),
             'desde'  => $request->query('desde'),
             'hasta'  => $request->query('hasta'),
         ];
