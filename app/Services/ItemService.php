@@ -69,7 +69,7 @@ class ItemService
         }
 
         $payload = collect($data)
-            ->except('unidades_minimas')
+            ->except(['unidades_minimas', 'proveedor_ids'])
             ->toArray();
 
         $payload['controla_inventario'] = $controlaAhora;
@@ -166,6 +166,8 @@ class ItemService
                 throw new HttpException(422, 'Un servicio no puede tener cantidad inicial en inventario.');
             }
 
+            $proveedorId = $data['proveedor_id'] ?? null;
+
             // Crear el ítem
             $item = $this->itemRepository->create([
                 'nombre'                => $data['nombre'],
@@ -175,7 +177,7 @@ class ItemService
                 'precio_venta_sugerido' => $data['precio_venta_sugerido'] ?? 0,
                 'controla_inventario'   => $controlaInventario,
                 'unidad'                => $data['unidad'] ?? 'UND',
-                'proveedor_id'          => $data['proveedor_id'] ?? null,
+                'proveedor_id'          => $proveedorId,
                 'empresa_id'            => $empresaId,
                 'is_activo'             => array_key_exists('is_activo', $data) ? (bool) $data['is_activo'] : true,
             ]);
@@ -210,6 +212,7 @@ class ItemService
                     'item_id'              => $item->id,
                     'usuario_id'           => $usuarioId,
                     'tipo'                 => 'ENTRADA',
+                    'subtipo'              => 'COMPRA_LIBRE',
                     'motivo'               => 'Carga libre inicial',
                     'referencia_tipo'      => 'ITEM',
                     'referencia_id'        => $item->id,
@@ -240,7 +243,7 @@ class ItemService
             // Crear compra
             $compra = $this->compraService->crear([
                 'fecha'             => $fecha,
-                'proveedor_id'      => $data['proveedor_id'] ?? null,
+                'proveedor_id'      => $proveedorId,
                 'condicion_pago'    => $condicionPago,
                 'fecha_vencimiento' => $fechaVencimiento,
                 'impuestos'         => $impuestos,
@@ -268,17 +271,18 @@ class ItemService
                     throw new HttpException(422, 'El abono inicial no puede ser mayor al total de la compra.');
                 }
 
-                $this->compraService->registrarPagoConArchivo(
-                    $compra->id,
-                    $abonoInicial,
-                    $fecha,
-                    $medioPago,
-                    "Abono inicial compra {$compra->numero} - {$item->nombre}",
-                    $notas,
-                    $empresaId,
-                    $usuarioId,
-                    $archivoData
-                );
+                $this->compraService->registrarPago($compra->id, [
+                    'monto'       => $abonoInicial,
+                    'fecha'       => $fecha,
+                    'medio_pago'  => $medioPago,
+                    'descripcion' => "Abono inicial compra {$compra->numero} - {$item->nombre}",
+                    'notas'       => $notas,
+                    ...(isset($archivoData) ? [
+                        'archivo_path'   => $archivoData['path'],
+                        'archivo_mime'   => $archivoData['mime'],
+                        'archivo_nombre' => $archivoData['nombre'],
+                    ] : []),
+                ], $empresaId, $usuarioId);
             }
 
             return [
@@ -286,6 +290,212 @@ class ItemService
                 'item'    => $item->fresh(['inventario', 'proveedor']),
                 'compra'  => $compra->fresh(['items.item', 'proveedor', 'egresos']),
                 'message' => 'Ítem creado y cargado correctamente.',
+            ];
+        });
+    }
+
+    public function listarCompras(int $itemId, int $empresaId): array
+    {
+        $this->obtener($itemId, $empresaId);
+        return $this->compraService->listarPorItem($itemId, $empresaId);
+    }
+
+    public function editarCompra(int $itemId, int $compraId, array $data, int $empresaId, int $usuarioId): array
+    {
+        $item = $this->obtener($itemId, $empresaId);
+
+        $compra = $this->compraService->obtener($compraId, $empresaId);
+
+        $compraItem = $compra->items->firstWhere('item_id', $itemId);
+        if (! $compraItem) {
+            throw new HttpException(404, 'Este ítem no pertenece a esa compra.');
+        }
+
+        $nuevaCantidad = (int) $data['cantidad'];
+        $nuevoPrecio   = isset($data['precio_unitario'])
+            ? (float) $data['precio_unitario']
+            : (float) $compraItem->precio_unitario;
+        $motivo = $data['motivo'] ?? null;
+
+        if ($nuevaCantidad <= 0) {
+            throw new HttpException(422, 'La cantidad debe ser mayor a cero.');
+        }
+
+        // Minimum quantity: can't go below what's already been consumed from this purchase
+        $stockActual      = (float) ($item->inventario?->unidades_actuales ?? 0);
+        $cantidadOriginal = (int) $compraItem->cantidad;
+        $cantidadMinima   = max(1, $cantidadOriginal - (int) $stockActual);
+
+        if ($nuevaCantidad < $cantidadMinima) {
+            throw new HttpException(
+                422,
+                "No se puede reducir a {$nuevaCantidad} unidades. " .
+                "Mínimo permitido: {$cantidadMinima} " .
+                "(stock actual: {$stockActual}, compra original: {$cantidadOriginal})."
+            );
+        }
+
+        return $this->compraService->ajustarCompraItem(
+            $compraId,
+            $itemId,
+            $nuevaCantidad,
+            $nuevoPrecio,
+            $motivo,
+            $empresaId,
+            $usuarioId
+        );
+    }
+
+    public function registrarMovimiento(int $id, array $data, int $empresaId, ?int $usuarioId, ?UploadedFile $archivo = null): array
+    {
+        $item = $this->obtener($id, $empresaId);
+
+        if (!$item->controla_inventario) {
+            throw new HttpException(422, 'Este ítem no controla inventario.');
+        }
+
+        $inventario = $item->inventario;
+        if (!$inventario) {
+            throw new HttpException(422, 'El ítem no tiene inventario configurado.');
+        }
+
+        $accion   = $data['accion'];
+        $cantidad = (int) $data['cantidad'];
+        $motivo   = $data['motivo'] ?? null;
+
+        if ($cantidad <= 0) {
+            throw new HttpException(422, 'La cantidad debe ser mayor a cero.');
+        }
+
+        return DB::transaction(function () use ($item, $inventario, $data, $accion, $cantidad, $motivo, $empresaId, $usuarioId, $archivo) {
+
+            if ($accion === 'RETIRAR') {
+                if ($cantidad > (float) $inventario->unidades_actuales) {
+                    throw new HttpException(422, "Stock insuficiente. Disponible: {$inventario->unidades_actuales}");
+                }
+                $nuevas = (float) $inventario->unidades_actuales - $cantidad;
+                $inventario->update(['unidades_actuales' => $nuevas]);
+
+                InventarioMovimiento::create([
+                    'empresa_id'           => $empresaId,
+                    'item_id'              => $item->id,
+                    'usuario_id'           => $usuarioId,
+                    'tipo'                 => 'SALIDA',
+                    'subtipo'              => 'RETIRO_MANUAL',
+                    'motivo'               => $motivo ?? 'Retiro manual',
+                    'referencia_tipo'      => 'AJUSTE',
+                    'referencia_id'        => null,
+                    'unidades'             => $cantidad,
+                    'unidades_resultantes' => $nuevas,
+                    'ocurrido_en'          => now(),
+                ]);
+
+                return [
+                    'modo'    => 'RETIRO',
+                    'item'    => $item->fresh(['inventario', 'proveedor']),
+                    'compra'  => null,
+                    'message' => 'Retiro de inventario registrado.',
+                ];
+            }
+
+            // AGREGAR
+            $condicionPago   = $data['condicion_pago'] ?? 'LIBRE';
+            $proveedorId     = isset($data['proveedor_id']) ? (int) $data['proveedor_id'] : null;
+
+            if (in_array($condicionPago, ['CONTADO', 'CREDITO']) && ! $proveedorId) {
+                throw new HttpException(422, 'El proveedor es obligatorio para compras a contado o crédito.');
+            }
+            $fecha           = $data['fecha'] ?? now()->toDateString();
+            $precioUnitario  = (float) ($data['precio_unitario'] ?? $item->precio_compra ?? 0);
+            $impuestos       = (float) ($data['impuestos'] ?? 0);
+            $abonoInicial    = (float) ($data['abono_inicial'] ?? 0);
+            $medioPago       = $data['medio_pago'] ?? 'EFECTIVO';
+            $fechaVencimiento = $data['fecha_vencimiento'] ?? null;
+
+            if ($condicionPago === 'LIBRE') {
+                $nuevas = (float) $inventario->unidades_actuales + $cantidad;
+                $inventario->update(['unidades_actuales' => $nuevas]);
+
+                InventarioMovimiento::create([
+                    'empresa_id'           => $empresaId,
+                    'item_id'              => $item->id,
+                    'usuario_id'           => $usuarioId,
+                    'tipo'                 => 'ENTRADA',
+                    'subtipo'              => 'COMPRA_LIBRE',
+                    'motivo'               => $motivo ?? 'Entrada manual libre',
+                    'referencia_tipo'      => 'AJUSTE',
+                    'referencia_id'        => null,
+                    'unidades'             => $cantidad,
+                    'unidades_resultantes' => $nuevas,
+                    'ocurrido_en'          => now(),
+                ]);
+
+                if ($proveedorId) {
+                    $item->update(['proveedor_id' => $proveedorId]);
+                }
+
+                return [
+                    'modo'    => 'ENTRADA_LIBRE',
+                    'item'    => $item->fresh(['inventario', 'proveedor']),
+                    'compra'  => null,
+                    'message' => 'Entrada registrada (sin afectar caja).',
+                ];
+            }
+
+            // CONTADO o CREDITO — crear compra
+            $archivoData = null;
+            if ($archivo) {
+                $path = $archivo->store('comprobantes/egresos', 'public');
+                $archivoData = [
+                    'path'   => $path,
+                    'mime'   => $archivo->getMimeType(),
+                    'nombre' => $archivo->getClientOriginalName(),
+                ];
+            }
+
+            $compra = $this->compraService->crear([
+                'fecha'             => $fecha,
+                'proveedor_id'      => $proveedorId,
+                'condicion_pago'    => $condicionPago,
+                'fecha_vencimiento' => $fechaVencimiento,
+                'impuestos'         => $impuestos,
+                'notas'             => $motivo ?? "Reposición stock — {$item->nombre}",
+                'items'             => [[
+                    'item_id'         => $item->id,
+                    'cantidad'        => $cantidad,
+                    'precio_unitario' => $precioUnitario,
+                ]],
+            ], $empresaId, $usuarioId);
+
+            $compra = $this->compraService->confirmar(
+                $compra->id,
+                $empresaId,
+                $usuarioId,
+                $condicionPago === 'CONTADO' ? $archivoData : null
+            );
+
+            if ($condicionPago === 'CREDITO' && $abonoInicial > 0) {
+                if ($abonoInicial > (float) $compra->total) {
+                    throw new HttpException(422, 'El abono inicial no puede ser mayor al total.');
+                }
+                $this->compraService->registrarPago($compra->id, [
+                    'monto'       => $abonoInicial,
+                    'fecha'       => $fecha,
+                    'medio_pago'  => $medioPago,
+                    'descripcion' => "Abono inicial compra {$compra->numero} — {$item->nombre}",
+                    'notas'       => $motivo ?? null,
+                ], $empresaId, $usuarioId);
+            }
+
+            if ($proveedorId) {
+                $item->update(['proveedor_id' => $proveedorId]);
+            }
+
+            return [
+                'modo'    => 'ENTRADA_' . $condicionPago,
+                'item'    => $item->fresh(['inventario', 'proveedor']),
+                'compra'  => $compra->fresh(['items.item', 'proveedor', 'egresos']),
+                'message' => 'Entrada de inventario y compra registradas correctamente.',
             ];
         });
     }

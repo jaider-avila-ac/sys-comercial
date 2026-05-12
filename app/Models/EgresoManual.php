@@ -19,6 +19,7 @@ class EgresoManual extends Model
         'archivo_mime',
         'archivo_nombre',
         'estado',
+        'anulado_por_id',
     ];
 
     protected $casts = [
@@ -38,5 +39,10 @@ class EgresoManual extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function anuladoPor()
+    {
+        return $this->belongsTo(Usuario::class, 'anulado_por_id');
     }
 }

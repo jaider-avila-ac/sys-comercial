@@ -20,7 +20,7 @@ class FacturaRepository
         $pendiente = $filters['pendiente'] ?? null;
 
         return Factura::where('empresa_id', $empresaId)
-            ->with(['cliente', 'usuario'])
+            ->with(['cliente', 'usuario', 'anuladoPor'])
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
                     $sub->where('numero', 'like', "%{$search}%")
@@ -33,6 +33,10 @@ class FacturaRepository
             ->when($clienteId, fn($q) => $q->where('cliente_id', $clienteId))
             ->when($desde, fn($q) => $q->whereDate('fecha', '>=', $desde))
             ->when($hasta, fn($q) => $q->whereDate('fecha', '<=', $hasta))
+            ->when(
+                ($pendiente === 'true' || $pendiente === true) && !$estado,
+                fn($q) => $q->whereIn('estado', ['EMITIDA', 'BORRADOR'])
+            )
             ->when($pendiente === 'true' || $pendiente === true, fn($q) => $q->where('saldo', '>', 0))
             ->orderByDesc('created_at')
             ->paginate($perPage);
@@ -41,7 +45,7 @@ class FacturaRepository
     public function allByEmpresa(int $empresaId): Collection
     {
         return Factura::where('empresa_id', $empresaId)
-            ->with(['cliente', 'usuario'])
+            ->with(['cliente', 'usuario', 'anuladoPor'])
             ->orderByDesc('created_at')
             ->get();
     }

@@ -19,7 +19,7 @@ class IngresoMostradorRepository
     $hasta  = $filters['hasta']  ?? null;
 
     return IngresoMostrador::where('empresa_id', $empresaId)
-        ->with(['usuario', 'item'])
+        ->with(['usuario', 'item', 'anuladoPor'])
         ->when($search, fn($q) => $q->where(function($q) use ($search) {
             $q->where('numero', 'like', "%{$search}%")
               ->orWhere('descripcion', 'like', "%{$search}%")
@@ -136,8 +136,8 @@ class IngresoMostradorRepository
                 ->where('empresa_id', $empresaId)
                 ->delete();
 
-            $ingreso->update(['estado' => 'ANULADO']);
-            return $ingreso->fresh();
+            $ingreso->update(['estado' => 'ANULADO', 'anulado_por_id' => $usuarioId]);
+            return $ingreso->fresh(['usuario', 'anuladoPor']);
         });
     }
 }

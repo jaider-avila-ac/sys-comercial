@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Services\Auth\AuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -14,32 +13,15 @@ class AuthController extends Controller
         private readonly AuthService $authService,
     ) {}
 
-    // POST /api/auth/iniciar  — solo recibe el correo
-    public function iniciar(Request $request): JsonResponse
+    // POST /api/auth/login
+    public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string'],
         ]);
 
-        $sessionToken = $this->authService->iniciarSesion($data['email']);
-
-        return response()->json([
-            'session_token' => $sessionToken,
-        ]);
-    }
-
-    // POST /api/auth/verificar  — solo recibe session_token + password
-    public function verificar(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'session_token' => ['required', 'string', 'uuid'],
-            'password'      => ['required', 'string'],
-        ]);
-
-        $result = $this->authService->verificarSesion(
-            sessionToken: $data['session_token'],
-            password:     $data['password'],
-        );
+        $result = $this->authService->login($data['email'], $data['password']);
 
         return response()->json($result);
     }
@@ -65,15 +47,13 @@ class AuthController extends Controller
         ]);
     }
 
-
-      public function revokeAllSessions(Request $request): JsonResponse
+    // POST /api/auth/revoke-all-sessions
+    public function revokeAllSessions(Request $request): JsonResponse
     {
-        $usuario = $request->user();
-        
-        $this->authService->revocarTodasLasSesiones($usuario);
-        
+        $this->authService->revocarTodasLasSesiones($request->user());
+
         return response()->json([
-            'message' => 'Todas las sesiones han sido cerradas. Debes iniciar sesión nuevamente.'
+            'message' => 'Todas las sesiones han sido cerradas. Debes iniciar sesión nuevamente.',
         ]);
     }
 }

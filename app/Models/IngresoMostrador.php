@@ -26,6 +26,7 @@ class IngresoMostrador extends Model
         'archivo_mime',
         'archivo_nombre',
         'estado',
+        'anulado_por_id',
     ];
 
     protected $casts = [
@@ -55,5 +56,10 @@ class IngresoMostrador extends Model
     public function item()
     {
         return $this->belongsTo(Item::class, 'item_id');
+    }
+
+    public function anuladoPor()
+    {
+        return $this->belongsTo(Usuario::class, 'anulado_por_id');
     }
 }

@@ -17,7 +17,7 @@ return [
     | Allowed Methods
     |--------------------------------------------------------------------------
     */
-    'allowed_methods' => ['*'],
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
     /*
     |--------------------------------------------------------------------------
@@ -54,7 +54,7 @@ return [
     | Allowed Headers
     |--------------------------------------------------------------------------
     */
-    'allowed_headers' => ['*'],
+    'allowed_headers' => ['Authorization', 'Content-Type', 'Accept', 'X-XSRF-TOKEN', 'X-Empresa-Id', 'X-Requested-With'],
 
     /*
     |--------------------------------------------------------------------------

@@ -65,8 +65,8 @@ class PagoService
             throw new HttpException(404, 'Factura no encontrada.');
         }
 
-        if ($factura->estado !== 'EMITIDA') {
-            throw new HttpException(409, 'Solo se pueden registrar pagos sobre facturas EMITIDAS.');
+        if ($factura->estado === 'ANULADA') {
+            throw new HttpException(409, 'No se pueden registrar pagos sobre facturas anuladas.');
         }
 
         if ($monto <= 0) {

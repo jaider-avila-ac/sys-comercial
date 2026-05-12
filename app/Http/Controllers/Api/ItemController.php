@@ -110,6 +110,61 @@ class ItemController extends Controller
         );
     }
 
+    public function compras(Request $request, int $id): JsonResponse
+    {
+        return response()->json(
+            $this->itemService->listarCompras($id, $request->empresa_id_ctx)
+        );
+    }
+
+    public function editarCompra(Request $request, int $id, int $compraId): JsonResponse
+    {
+        $data = $request->validate([
+            'cantidad'        => ['required', 'integer', 'min:1'],
+            'precio_unitario' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'motivo'          => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        $resultado = $this->itemService->editarCompra(
+            $id,
+            $compraId,
+            $data,
+            $request->empresa_id_ctx,
+            $request->user()->id
+        );
+
+        return response()->json($resultado);
+    }
+
+    public function movimiento(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'accion'            => ['required', 'in:AGREGAR,RETIRAR'],
+            'cantidad'          => ['required', 'integer', 'min:1'],
+            'motivo'            => ['nullable', 'string'],
+            'proveedor_id'      => ['nullable', 'integer'],
+            'condicion_pago'    => ['nullable', 'in:CONTADO,CREDITO,LIBRE'],
+            'fecha'             => ['nullable', 'date'],
+            'fecha_vencimiento' => ['nullable', 'date'],
+            'precio_unitario'   => ['nullable', 'numeric', 'min:0'],
+            'impuestos'         => ['nullable', 'numeric', 'min:0'],
+            'abono_inicial'     => ['nullable', 'numeric', 'min:0'],
+            'medio_pago'        => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $archivo = $request->hasFile('archivo') ? $request->file('archivo') : null;
+
+        $resultado = $this->itemService->registrarMovimiento(
+            $id,
+            $data,
+            $request->empresa_id_ctx,
+            $request->user()->id,
+            $archivo
+        );
+
+        return response()->json($resultado, 201);
+    }
+
     public function destroy(Request $request, int $id): JsonResponse
     {
         $this->itemService->eliminar($id, $request->empresa_id_ctx, $request->user()->id);

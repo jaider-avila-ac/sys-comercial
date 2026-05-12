@@ -5,6 +5,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -16,32 +17,30 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
 
-  
-
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->alias([
-        'check.active.token' => \App\Http\Middleware\CheckActiveToken::class,
-    ]);
-})
-
-
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(HandleCors::class);
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
         $middleware->alias([
-            'empresa.context' => \App\Http\Middleware\ResolveEmpresaContext::class,
+            'check.active.token' => \App\Http\Middleware\CheckActiveToken::class,
+            'role.admin'         => \App\Http\Middleware\EnsureAdminRole::class,
         ]);
     })
 
     ->withExceptions(function (Exceptions $exceptions): void {
 
         $exceptions->render(function (\Throwable $e, $request) {
-            if (! $request->is('api/*')) {
-                return null;
+
+            $isApi = $request->is('api/*') || $request->expectsJson();
+
+            // Validación — exponer los errores de campos es correcto y necesario
+            if ($e instanceof ValidationException) {
+                return response()->json([
+                    'message' => 'Los datos proporcionados no son válidos.',
+                    'errors'  => $e->errors(),
+                ], 422);
             }
 
-            // HttpExceptionInterface (HttpException, NotFoundHttpException, etc.)
-            // tiene getStatusCode() — verificamos con instanceof, no method_exists
             if ($e instanceof HttpExceptionInterface) {
                 $status = $e->getStatusCode();
             } elseif ($e instanceof AuthenticationException) {
@@ -50,10 +49,23 @@ return Application::configure(basePath: dirname(__DIR__))
                 $status = 500;
             }
 
-            return response()->json(
-                ['message' => $e->getMessage() ?: 'Error del servidor.'],
-                $status
-            );
+            // Mensajes de error saneados — nunca exponer rutas internas, clases ni stack traces
+            $message = match (true) {
+                $status >= 500                                        => 'Error interno del servidor.',
+                $status === 404                                       => 'No encontrado.',
+                $status === 401                                       => $e->getMessage() ?: 'No autenticado.',
+                $status === 403                                       => $e->getMessage() ?: 'Acceso denegado.',
+                $status === 409                                       => $e->getMessage() ?: 'Conflicto de datos.',
+                $e instanceof HttpExceptionInterface && $e->getMessage() => $e->getMessage(),
+                default                                              => 'Error del servidor.',
+            };
+
+            if ($isApi) {
+                return response()->json(['message' => $message], $status);
+            }
+
+            // Rutas web — nunca mostrar debug HTML a visitantes
+            return response($status === 404 ? 'Not Found' : 'Error', $status);
         });
     })
 

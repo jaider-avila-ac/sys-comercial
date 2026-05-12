@@ -21,6 +21,7 @@ class EgresoCompra extends Model
         'archivo_mime',
         'archivo_nombre',
         'estado',
+        'anulado_por_id',
     ];
 
     protected $casts = [
@@ -45,5 +46,10 @@ class EgresoCompra extends Model
     public function compra()
     {
         return $this->belongsTo(Compra::class, 'compra_id');
+    }
+
+    public function anuladoPor()
+    {
+        return $this->belongsTo(Usuario::class, 'anulado_por_id');
     }
 }

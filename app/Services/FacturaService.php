@@ -23,6 +23,7 @@ class FacturaService
         private readonly LineaCalculoService $calculoService,
         private readonly NumeracionService $numeracionService,
         private readonly PagoRepository $pagoRepository,
+        private readonly ResumenService $resumenService,
     ) {}
 
     public function listar(int $empresaId, array $filters = [], int $perPage = 20): LengthAwarePaginator
@@ -142,12 +143,18 @@ class FacturaService
 
             $facturaAnulada = $this->facturaRepository->cambiarEstado($id, 'ANULADA');
 
+            Factura::where('id', $id)->update(['anulado_por_id' => request()->user()?->id]);
+
             // Si la factura vino de una cotización, revertirla a EMITIDA para que pueda facturarse de nuevo
             if ($factura->cotizacion_id) {
                 $this->cotizacionRepository->cambiarEstado($factura->cotizacion_id, 'EMITIDA');
             }
 
-            return $facturaAnulada;
+            $result = $facturaAnulada->fresh(['cliente', 'usuario', 'anuladoPor']);
+
+            $this->resumenService->recalcular($empresaId);
+
+            return $result;
         });
     }
 

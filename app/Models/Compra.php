@@ -22,7 +22,7 @@ class Compra extends Model
         'saldo_pendiente',
         'estado',
         'notas',
-        
+        'anulado_por_id',
     ];
 
     protected $casts = [
@@ -65,5 +65,10 @@ class Compra extends Model
     public function egresos()
     {
         return $this->hasMany(EgresoCompra::class, 'compra_id');
+    }
+
+    public function anuladoPor()
+    {
+        return $this->belongsTo(Usuario::class, 'anulado_por_id');
     }
 }

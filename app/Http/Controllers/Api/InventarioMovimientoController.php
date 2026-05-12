@@ -56,21 +56,23 @@ class InventarioMovimientoController extends Controller
             }
 
             return [
-                'id' => $mov->id,
-                'tipo' => $mov->tipo,
-                'cantidad' => $mov->unidades,
-                'saldo_resultante' => $mov->unidades_resultantes,
-                'motivo' => $mov->motivo,
-                'ocurrido_en' => $mov->ocurrido_en,
-                'referencia_tipo' => $mov->referencia_tipo,
-                'referencia_id' => $mov->referencia_id,
+                'id'                => $mov->id,
+                'tipo'              => $mov->tipo,
+                'subtipo'           => $mov->subtipo,
+                'compra_id'         => $mov->compra_id,
+                'cantidad'          => $mov->unidades,
+                'saldo_resultante'  => $mov->unidades_resultantes,
+                'motivo'            => $mov->motivo,
+                'ocurrido_en'       => $mov->ocurrido_en,
+                'referencia_tipo'   => $mov->referencia_tipo,
+                'referencia_id'     => $mov->referencia_id,
                 'referencia_numero' => $refNumero,
-                'usuario_id' => $mov->usuario_id,
-                'usuario_nombres' => $mov->usuario?->nombres,
+                'usuario_id'        => $mov->usuario_id,
+                'usuario_nombres'   => $mov->usuario?->nombres,
                 'usuario_apellidos' => $mov->usuario?->apellidos,
-                'usuario_email' => $mov->usuario?->email,
-                'item_id' => $mov->item_id,
-                'item_nombre' => $mov->item?->nombre,
+                'usuario_email'     => $mov->usuario?->email,
+                'item_id'           => $mov->item_id,
+                'item_nombre'       => $mov->item?->nombre,
             ];
         });
 

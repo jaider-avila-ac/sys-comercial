@@ -24,6 +24,7 @@ class Factura extends Model
         'total',
         'total_pagado',
         'saldo',
+        'anulado_por_id',
     ];
 
     protected $casts = [
@@ -65,5 +66,10 @@ class Factura extends Model
     public function cotizacion()
     {
         return $this->belongsTo(Cotizacion::class, 'cotizacion_id');
+    }
+
+    public function anuladoPor()
+    {
+        return $this->belongsTo(Usuario::class, 'anulado_por_id');
     }
 }

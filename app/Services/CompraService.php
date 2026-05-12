@@ -117,11 +117,51 @@ class CompraService
     public function anular(int $id, int $empresaId, int $usuarioId): Compra
     {
         $compra = $this->obtener($id, $empresaId);
-        
+
         if ($compra->estado === 'ANULADA') {
             throw new HttpException(422, 'La compra ya está anulada.');
         }
 
         return $this->compraRepository->anular($id, $empresaId, $usuarioId);
+    }
+
+    public function ajustarCompraItem(int $compraId, int $itemId, int $nuevaCantidad, float $nuevoPrecio, ?string $motivo, int $empresaId, int $usuarioId): array
+    {
+        $compra = $this->obtener($compraId, $empresaId);
+
+        if ($compra->estado === 'ANULADA') {
+            throw new HttpException(422, 'No se puede editar una compra anulada.');
+        }
+
+        if ($compra->condicion_pago === 'LIBRE') {
+            throw new HttpException(422, 'Las entradas libres no tienen compra editable. Use un movimiento de ajuste.');
+        }
+
+        return $this->compraRepository->ajustarCompraItem($compraId, $itemId, $nuevaCantidad, $nuevoPrecio, $motivo, $usuarioId);
+    }
+
+    public function listarPorItem(int $itemId, int $empresaId): array
+    {
+        return \App\Models\CompraItem::where('item_id', $itemId)
+            ->whereHas('compra', fn ($q) => $q->where('empresa_id', $empresaId))
+            ->with(['compra.proveedor'])
+            ->get()
+            ->sortByDesc('compra_id')
+            ->map(fn ($ci) => [
+                'compra_id'        => $ci->compra_id,
+                'numero'           => $ci->compra?->numero,
+                'estado'           => $ci->compra?->estado,
+                'condicion_pago'   => $ci->compra?->condicion_pago,
+                'fecha'            => $ci->compra?->fecha,
+                'proveedor_id'     => $ci->compra?->proveedor_id,
+                'proveedor_nombre' => $ci->compra?->proveedor?->nombre,
+                'cantidad'         => $ci->cantidad,
+                'precio_unitario'  => $ci->precio_unitario,
+                'subtotal'         => $ci->subtotal,
+                'total_compra'     => $ci->compra?->total,
+                'saldo_pendiente'  => $ci->compra?->saldo_pendiente,
+            ])
+            ->values()
+            ->all();
     }
 }

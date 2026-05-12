@@ -2,6 +2,5 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Silenciar cualquier ruta web indefinida — no exponer errores de debug
+Route::fallback(fn () => response('', 404));

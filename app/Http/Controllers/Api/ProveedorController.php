@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Proveedor;
 use App\Services\ProveedorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ProveedorController extends Controller
 {
@@ -108,5 +112,106 @@ class ProveedorController extends Controller
     {
         $this->proveedorService->eliminar($id, $request->empresa_id_ctx);
         return response()->json(['message' => 'Proveedor eliminado correctamente.']);
+    }
+
+    // POST /api/proveedores/importar
+    public function importar(Request $request): JsonResponse
+    {
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls', 'max:5120']]);
+
+        $path = $request->file('file')->store('temp_imports');
+
+        try {
+            $spreadsheet = IOFactory::load(Storage::path($path));
+            $rawRows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+
+            if (count($rawRows) < 2) {
+                return response()->json(['message' => 'El archivo no tiene datos.'], 422);
+            }
+
+            $header = array_map(fn($h) => strtolower(trim((string)$h)), $rawRows[0]);
+            $cols   = ['nombre', 'nit', 'contacto', 'email', 'telefono', 'direccion'];
+            $idx    = [];
+            foreach ($cols as $c) {
+                $pos = array_search($c, $header);
+                $idx[$c] = $pos !== false ? $pos : null;
+            }
+
+            $empresaId   = $request->empresa_id_ctx;
+            $errores     = [];
+            $registros   = [];
+            $emailsArchivo = [];
+            $nitsArchivo   = [];
+
+            foreach (array_slice($rawRows, 1) as $i => $row) {
+                $fila = $i + 2;
+                $val  = fn($c) => isset($idx[$c]) && $idx[$c] !== null ? trim((string)($row[$idx[$c]] ?? '')) : '';
+
+                $nombre = $val('nombre');
+                $email  = strtolower($val('email'));
+                $nit    = $val('nit');
+
+                if (!$nombre) {
+                    $errores[] = ['fila' => $fila, 'campo' => 'nombre', 'mensaje' => 'El nombre es obligatorio'];
+                    continue;
+                }
+                if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $errores[] = ['fila' => $fila, 'campo' => 'email', 'mensaje' => "Email inválido: {$email}"];
+                    continue;
+                }
+                if ($email && in_array($email, $emailsArchivo)) {
+                    $errores[] = ['fila' => $fila, 'campo' => 'email', 'mensaje' => "Email duplicado en el archivo: {$email}"];
+                    continue;
+                }
+                if ($nit && in_array($nit, $nitsArchivo)) {
+                    $errores[] = ['fila' => $fila, 'campo' => 'nit', 'mensaje' => "NIT duplicado en el archivo: {$nit}"];
+                    continue;
+                }
+                if ($email && Proveedor::where('empresa_id', $empresaId)->where('email', $email)->exists()) {
+                    $errores[] = ['fila' => $fila, 'campo' => 'email', 'mensaje' => "Email ya registrado en el sistema: {$email}"];
+                    continue;
+                }
+                if ($nit && Proveedor::where('empresa_id', $empresaId)->where('nit', $nit)->exists()) {
+                    $errores[] = ['fila' => $fila, 'campo' => 'nit', 'mensaje' => "NIT ya registrado en el sistema: {$nit}"];
+                    continue;
+                }
+
+                if ($email) $emailsArchivo[] = $email;
+                if ($nit)   $nitsArchivo[]   = $nit;
+
+                $now = now();
+                $registros[] = [
+                    'empresa_id' => $empresaId,
+                    'nombre'     => $nombre,
+                    'nit'        => $nit ?: null,
+                    'contacto'   => $val('contacto') ?: null,
+                    'email'      => $email ?: null,
+                    'telefono'   => $val('telefono') ?: null,
+                    'direccion'  => $val('direccion') ?: null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            if (!empty($errores)) {
+                return response()->json([
+                    'message' => 'Se encontraron errores. No se importó ningún registro.',
+                    'errores' => $errores,
+                ], 422);
+            }
+
+            if (empty($registros)) {
+                return response()->json(['message' => 'No se encontraron registros para importar.'], 422);
+            }
+
+            DB::table('proveedores')->insert($registros);
+
+            return response()->json([
+                'message'    => count($registros) . ' proveedores importados correctamente.',
+                'importados' => count($registros),
+            ]);
+        } finally {
+            Storage::delete($path);
+        }
     }
 }

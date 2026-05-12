@@ -127,10 +127,11 @@ class EgresoManualRepository
                 ->delete();
 
             $egreso->update([
-                'estado' => 'ANULADO',
+                'estado'         => 'ANULADO',
+                'anulado_por_id' => request()->user()?->id,
             ]);
 
-            return $egreso->fresh('usuario');
+            return $egreso->fresh(['usuario', 'anuladoPor']);
         });
     }
 }

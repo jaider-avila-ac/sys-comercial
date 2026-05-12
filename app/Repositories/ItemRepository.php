@@ -52,7 +52,7 @@ class ItemRepository
 
     public function findById(int $id): ?Item
     {
-        return Item::with(['inventario', 'proveedor'])->find($id);
+        return Item::with(['inventario', 'proveedor', 'proveedores'])->find($id);
     }
 
     public function create(array $data): Item
@@ -76,6 +76,11 @@ class ItemRepository
         ]);
 
         return $item->fresh(['inventario', 'proveedor']);
+    }
+
+    public function syncProveedores(int $itemId, array $proveedorIds): void
+    {
+        Item::findOrFail($itemId)->proveedores()->sync($proveedorIds);
     }
 
     public function delete(int $id): void

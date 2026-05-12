@@ -122,10 +122,11 @@ class IngresoManualRepository
                 ->delete();
 
             $ingreso->update([
-                'estado' => 'ANULADO',
+                'estado'         => 'ANULADO',
+                'anulado_por_id' => request()->user()?->id,
             ]);
 
-            return $ingreso->fresh('usuario');
+            return $ingreso->fresh(['usuario', 'anuladoPor']);
         });
     }
 }

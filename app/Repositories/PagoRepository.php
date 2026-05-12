@@ -19,7 +19,7 @@ class PagoRepository
         $hasta  = $filters['hasta']  ?? null;
 
         return IngresoPago::where('empresa_id', $empresaId)
-            ->with(['aplicaciones.factura', 'usuario'])
+            ->with(['aplicaciones.factura', 'usuario', 'anuladoPor'])
             ->when($search, fn($q) => $q->where(fn($q) =>
                 $q->where('numero', 'like', "%{$search}%")
                   ->orWhere('descripcion', 'like', "%{$search}%")
@@ -33,14 +33,14 @@ class PagoRepository
     public function allByEmpresa(int $empresaId): Collection
     {
         return IngresoPago::where('empresa_id', $empresaId)
-            ->with(['aplicaciones.factura', 'usuario'])
+            ->with(['aplicaciones.factura', 'usuario', 'anuladoPor'])
             ->orderByDesc('created_at')
             ->get();
     }
 
     public function findById(int $id): ?IngresoPago
     {
-        return IngresoPago::with(['aplicaciones.factura', 'usuario'])->find($id);
+        return IngresoPago::with(['aplicaciones.factura', 'usuario', 'anuladoPor'])->find($id);
     }
 
     public function allByFactura(int $facturaId): Collection
@@ -48,9 +48,13 @@ class PagoRepository
         return IngresoPago::whereHas('aplicaciones', function ($query) use ($facturaId) {
             $query->where('factura_id', $facturaId);
         })
-        ->with(['usuario'])
+        ->where('estado', 'ACTIVO')
+        ->with(['usuario', 'anuladoPor'])
+        ->orderByDesc('fecha')
         ->get()
         ->map(function ($pago) {
+            $u = $pago->usuario;
+            $au = $pago->anuladoPor;
             return [
                 'id' => $pago->id,
                 'numero' => $pago->numero,
@@ -62,7 +66,8 @@ class PagoRepository
                 'monto' => (float) $pago->monto,
                 'descripcion' => $pago->descripcion,
                 'estado' => $pago->estado,
-                'usuario' => $pago->usuario?->nombres ?? $pago->usuario?->name ?? null,
+                'usuario' => $u ? ['nombre_completo' => trim("{$u->nombres} {$u->apellidos}")] : null,
+                'anulado_por' => $au ? ['nombre_completo' => trim("{$au->nombres} {$au->apellidos}")] : null,
             ];
         });
     }
@@ -131,9 +136,9 @@ class PagoRepository
                 ->where('empresa_id', $empresaId)
                 ->delete();
 
-            $pago->update(['estado' => 'ANULADO']);
+            $pago->update(['estado' => 'ANULADO', 'anulado_por_id' => request()->user()?->id]);
 
-            return $pago->fresh(['aplicaciones.factura']);
+            return $pago->fresh(['aplicaciones.factura', 'usuario', 'anuladoPor']);
         });
     }
 }

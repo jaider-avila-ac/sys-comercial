@@ -109,8 +109,8 @@ class EgresoCompraRepository
                 ->where('empresa_id', $empresaId)
                 ->delete();
 
-            $egreso->update(['estado' => 'ANULADO']);
-            return $egreso->fresh();
+            $egreso->update(['estado' => 'ANULADO', 'anulado_por_id' => request()->user()?->id]);
+            return $egreso->fresh(['usuario', 'anuladoPor']);
         });
     }
 }

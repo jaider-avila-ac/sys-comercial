@@ -26,6 +26,8 @@ class IngresoUnificadoService
                 ->leftJoin('pago_aplicaciones', 'ingresos_pagos.id', '=', 'pago_aplicaciones.ingreso_pago_id')
                 ->leftJoin('facturas', 'pago_aplicaciones.factura_id', '=', 'facturas.id')
                 ->leftJoin('clientes', 'facturas.cliente_id', '=', 'clientes.id')
+                ->leftJoin('usuarios as u_reg', 'ingresos_pagos.usuario_id', '=', 'u_reg.id')
+                ->leftJoin('usuarios as u_anul', 'ingresos_pagos.anulado_por_id', '=', 'u_anul.id')
                 ->select(
                     DB::raw("CAST(ingresos_pagos.id AS CHAR) as id"),
                     'ingresos_pagos.numero as recibo',
@@ -35,9 +37,12 @@ class IngresoUnificadoService
                     'ingresos_pagos.forma_pago',
                     'ingresos_pagos.referencia',
                     'ingresos_pagos.notas',
+                    'facturas.numero as descripcion',
                     'clientes.nombre_razon_social as cliente_nombre',
                     'ingresos_pagos.created_at as orden',
-                    'ingresos_pagos.estado'
+                    'ingresos_pagos.estado',
+                    DB::raw("TRIM(CONCAT_WS(' ', u_reg.nombres, u_reg.apellidos)) as usuario_nombre"),
+                    DB::raw("TRIM(CONCAT_WS(' ', u_anul.nombres, u_anul.apellidos)) as anulado_por_nombre")
                 );
             $union = $pagos;
         }
@@ -45,19 +50,24 @@ class IngresoUnificadoService
         // 2. Ventas mostrador - solo si no hay filtro tipo o tipo es VENTA_MOSTRADOR
         if (!$tipo || $tipo === 'VENTA_MOSTRADOR') {
             $mostrador = DB::table('ingresos_mostrador')
-                ->where('empresa_id', $empresaId)
+                ->where('ingresos_mostrador.empresa_id', $empresaId)
+                ->leftJoin('usuarios as u_reg', 'ingresos_mostrador.usuario_id', '=', 'u_reg.id')
+                ->leftJoin('usuarios as u_anul', 'ingresos_mostrador.anulado_por_id', '=', 'u_anul.id')
                 ->select(
-                    DB::raw("CAST(id AS CHAR) as id"),
-                    'numero as recibo',
-                    'fecha',
+                    DB::raw("CAST(ingresos_mostrador.id AS CHAR) as id"),
+                    'ingresos_mostrador.numero as recibo',
+                    'ingresos_mostrador.fecha',
                     DB::raw("'VENTA_MOSTRADOR' as tipo"),
-                    'monto',
-                    'forma_pago',
-                    'referencia',
-                    'notas',
+                    'ingresos_mostrador.monto',
+                    'ingresos_mostrador.forma_pago',
+                    'ingresos_mostrador.referencia',
+                    'ingresos_mostrador.notas',
+                    'ingresos_mostrador.descripcion',
                     DB::raw('NULL as cliente_nombre'),
-                    'created_at as orden',
-                    'estado'
+                    'ingresos_mostrador.created_at as orden',
+                    'ingresos_mostrador.estado',
+                    DB::raw("TRIM(CONCAT_WS(' ', u_reg.nombres, u_reg.apellidos)) as usuario_nombre"),
+                    DB::raw("TRIM(CONCAT_WS(' ', u_anul.nombres, u_anul.apellidos)) as anulado_por_nombre")
                 );
             
             if ($union === null) {
@@ -70,19 +80,24 @@ class IngresoUnificadoService
         // 3. Ingresos manuales - solo si no hay filtro tipo o tipo es INGRESO_MANUAL
         if (!$tipo || $tipo === 'INGRESO_MANUAL') {
             $manuales = DB::table('ingresos_manuales')
-                ->where('empresa_id', $empresaId)
+                ->where('ingresos_manuales.empresa_id', $empresaId)
+                ->leftJoin('usuarios as u_reg', 'ingresos_manuales.usuario_id', '=', 'u_reg.id')
+                ->leftJoin('usuarios as u_anul', 'ingresos_manuales.anulado_por_id', '=', 'u_anul.id')
                 ->select(
-                    DB::raw("CAST(id AS CHAR) as id"),
-                    DB::raw("CONCAT('MAN-', id) as recibo"),
-                    'fecha',
+                    DB::raw("CAST(ingresos_manuales.id AS CHAR) as id"),
+                    DB::raw("CONCAT('MAN-', ingresos_manuales.id) as recibo"),
+                    'ingresos_manuales.fecha',
                     DB::raw("'INGRESO_MANUAL' as tipo"),
-                    'monto',
+                    'ingresos_manuales.monto',
                     DB::raw("'EFECTIVO' as forma_pago"),
                     DB::raw("NULL as referencia"),
-                    'notas',
+                    'ingresos_manuales.notas',
+                    'ingresos_manuales.descripcion',
                     DB::raw('NULL as cliente_nombre'),
-                    'created_at as orden',
-                    'estado'
+                    'ingresos_manuales.created_at as orden',
+                    'ingresos_manuales.estado',
+                    DB::raw("TRIM(CONCAT_WS(' ', u_reg.nombres, u_reg.apellidos)) as usuario_nombre"),
+                    DB::raw("TRIM(CONCAT_WS(' ', u_anul.nombres, u_anul.apellidos)) as anulado_por_nombre")
                 );
             
             if ($union === null) {
@@ -112,6 +127,7 @@ class IngresoUnificadoService
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('recibo', 'like', "%{$search}%")
+                  ->orWhere('descripcion', 'like', "%{$search}%")
                   ->orWhere('notas', 'like', "%{$search}%")
                   ->orWhere('referencia', 'like', "%{$search}%")
                   ->orWhere('cliente_nombre', 'like', "%{$search}%");
@@ -151,8 +167,11 @@ class IngresoUnificadoService
                 'forma_pago' => $formaPagoMap[$item->forma_pago] ?? $item->forma_pago,
                 'referencia' => $item->referencia,
                 'notas' => $item->notas,
+                'descripcion' => $item->descripcion,
                 'cliente_nombre' => $concepto,
                 'estado' => $item->estado ?? 'ACTIVO',
+                'usuario' => ($item->usuario_nombre ?? '') !== '' ? ['nombre_completo' => $item->usuario_nombre] : null,
+                'anulado_por' => ($item->anulado_por_nombre ?? '') !== '' ? ['nombre_completo' => $item->anulado_por_nombre] : null,
             ];
         });
         

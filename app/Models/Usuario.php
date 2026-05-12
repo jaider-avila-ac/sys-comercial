@@ -42,6 +42,11 @@ class Usuario extends Model
     // Helpers
     // -------------------------------------------------------------------------
 
+    public function getAuthIdentifier(): mixed
+    {
+        return $this->getKey();
+    }
+
     public function getNombreCompletoAttribute(): string
     {
         return trim("{$this->nombres} {$this->apellidos}");

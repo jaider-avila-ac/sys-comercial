@@ -14,7 +14,7 @@ class ReporteService
         // ── Facturas en el período ──────────────────────────────────────────
         $totalesFacturas = DB::table('facturas')
             ->where('empresa_id', $empresaId)
-            ->where('estado', 'EMITIDA')
+            ->whereIn('estado', ['EMITIDA', 'BORRADOR'])
             ->whereBetween('fecha', [$desde, $hasta])
             ->selectRaw('
                 COALESCE(SUM(total), 0) as total_facturado,

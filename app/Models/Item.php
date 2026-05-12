@@ -42,6 +42,12 @@ class Item extends Model
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
     }
 
+    public function proveedores()
+    {
+        return $this->belongsToMany(Proveedor::class, 'item_proveedores', 'item_id', 'proveedor_id')
+                    ->withTimestamps();
+    }
+
     public function inventario()
     {
         return $this->hasOne(Inventario::class, 'item_id');

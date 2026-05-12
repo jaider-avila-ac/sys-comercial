@@ -24,10 +24,11 @@ class EgresoUnificadoService
             $compras = DB::table('egresos_compras')
                 ->leftJoin('compras', 'egresos_compras.compra_id', '=', 'compras.id')
                 ->leftJoin('proveedores', 'compras.proveedor_id', '=', 'proveedores.id')
+                ->leftJoin('usuarios as u_reg', 'egresos_compras.usuario_id', '=', 'u_reg.id')
+                ->leftJoin('usuarios as u_anul', 'egresos_compras.anulado_por_id', '=', 'u_anul.id')
                 ->where('egresos_compras.empresa_id', $empresaId)
                 ->select(
                     DB::raw("CAST(egresos_compras.id AS CHAR) as id"),
-                    // 🔥 Toma el número de la compra, o genera uno si no existe
                     DB::raw("COALESCE(compras.numero, CONCAT('COMP-', compras.id)) as recibo"),
                     'egresos_compras.fecha',
                     DB::raw("'EGRESO_COMPRA' as tipo"),
@@ -39,7 +40,9 @@ class EgresoUnificadoService
                     'proveedores.nombre as proveedor_nombre',
                     'egresos_compras.archivo_path',
                     'egresos_compras.archivo_nombre',
-                    'egresos_compras.created_at as orden'
+                    'egresos_compras.created_at as orden',
+                    DB::raw("TRIM(CONCAT_WS(' ', u_reg.nombres, u_reg.apellidos)) as usuario_nombre"),
+                    DB::raw("TRIM(CONCAT_WS(' ', u_anul.nombres, u_anul.apellidos)) as anulado_por_nombre")
                 );
 
             if ($estado) {
@@ -52,21 +55,25 @@ class EgresoUnificadoService
         // 2. Egresos manuales - usan su propio número
         if (!$tipo || $tipo === 'EGRESO_MANUAL') {
             $manuales = DB::table('egresos_manuales')
-                ->where('empresa_id', $empresaId)
+                ->where('egresos_manuales.empresa_id', $empresaId)
+                ->leftJoin('usuarios as u_reg', 'egresos_manuales.usuario_id', '=', 'u_reg.id')
+                ->leftJoin('usuarios as u_anul', 'egresos_manuales.anulado_por_id', '=', 'u_anul.id')
                 ->select(
-                    DB::raw("CAST(id AS CHAR) as id"),
-                    DB::raw("COALESCE(numero, CONCAT('EGR-', id)) as recibo"),
-                    'fecha',
+                    DB::raw("CAST(egresos_manuales.id AS CHAR) as id"),
+                    DB::raw("COALESCE(egresos_manuales.numero, CONCAT('EGR-', egresos_manuales.id)) as recibo"),
+                    'egresos_manuales.fecha',
                     DB::raw("'EGRESO_MANUAL' as tipo"),
-                    'descripcion',
-                    'monto',
-                    'medio_pago',
-                    'notas',
-                    'estado',
+                    'egresos_manuales.descripcion',
+                    'egresos_manuales.monto',
+                    'egresos_manuales.medio_pago',
+                    'egresos_manuales.notas',
+                    'egresos_manuales.estado',
                     DB::raw('NULL as proveedor_nombre'),
-                    'archivo_path',
-                    'archivo_nombre',
-                    'created_at as orden'
+                    'egresos_manuales.archivo_path',
+                    'egresos_manuales.archivo_nombre',
+                    'egresos_manuales.created_at as orden',
+                    DB::raw("TRIM(CONCAT_WS(' ', u_reg.nombres, u_reg.apellidos)) as usuario_nombre"),
+                    DB::raw("TRIM(CONCAT_WS(' ', u_anul.nombres, u_anul.apellidos)) as anulado_por_nombre")
                 );
 
             if ($estado) {
@@ -129,6 +136,8 @@ class EgresoUnificadoService
                 'proveedor_nombre' => $item->proveedor_nombre,
                 'archivo_url'      => $item->archivo_path ? Storage::url($item->archivo_path) : null,
                 'archivo_nombre'   => $item->archivo_nombre,
+                'usuario'          => ($item->usuario_nombre ?? '') !== '' ? ['nombre_completo' => $item->usuario_nombre] : null,
+                'anulado_por'      => ($item->anulado_por_nombre ?? '') !== '' ? ['nombre_completo' => $item->anulado_por_nombre] : null,
             ];
         });
 

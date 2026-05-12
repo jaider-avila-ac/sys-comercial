@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EmpresaResumen;
 use App\Models\Factura;
 use App\Models\IngresoPago;
+use App\Models\IngresoMostrador;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,16 +23,20 @@ class DashboardController extends Controller
         $resumen = EmpresaResumen::find($empresaId);
 
         if (! $resumen) {
-            return response()->json(['message' => 'Sin datos aún. El sistema está generando el resumen.'], 404);
+            return response()->json([
+                'resumen'          => [],
+                'ultimas_facturas' => [],
+                'ultimos_pagos'    => [],
+            ]);
         }
 
         // ✅ Incluir estado en las facturas
         $ultimasFacturas = Factura::where('empresa_id', $empresaId)
-            ->where('estado', 'EMITIDA')
+            ->whereIn('estado', ['EMITIDA', 'BORRADOR'])
             ->with('cliente')
             ->orderByDesc('fecha')
             ->limit(5)
-            ->get(['id', 'numero', 'cliente_id', 'total', 'saldo', 'fecha', 'estado']);
+            ->get(['id', 'numero', 'cliente_id', 'total', 'saldo', 'total_pagado', 'fecha', 'estado']);
 
         // ✅ Incluir el cliente en los pagos (a través de la factura relacionada)
         $ultimosPagos = IngresoPago::where('empresa_id', $empresaId)
@@ -67,8 +72,27 @@ class DashboardController extends Controller
             ->whereIn('estado', ['PENDIENTE', 'PARCIAL'])
             ->sum('saldo_pendiente');
 
+        $saldoPendiente = DB::table('facturas')
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', ['EMITIDA', 'BORRADOR'])
+            ->sum('saldo');
+
+        $today = now()->toDateString();
+
+        $pagosFacHoy  = IngresoPago::where('empresa_id', $empresaId)
+            ->where('estado', 'ACTIVO')
+            ->whereDate('fecha', $today)
+            ->sum('monto');
+
+        $mostradorHoy = IngresoMostrador::where('empresa_id', $empresaId)
+            ->where('estado', 'ACTIVO')
+            ->whereDate('fecha', $today)
+            ->sum('monto');
+
         $resumenArray = array_merge($resumen->toArray(), [
             'cuentas_por_pagar' => round((float) $cuentasPorPagar, 2),
+            'saldo_pendiente'   => round((float) $saldoPendiente, 2),
+            'ingresos_hoy'      => round((float) $pagosFacHoy + (float) $mostradorHoy, 2),
         ]);
 
         return response()->json([

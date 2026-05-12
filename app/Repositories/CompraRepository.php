@@ -83,6 +83,8 @@ class CompraRepository
                         'item_id'              => $item->id,
                         'usuario_id'           => $usuarioId,
                         'tipo'                 => 'ENTRADA',
+                        'subtipo'              => $compra->condicion_pago === 'CONTADO' ? 'COMPRA_CONTADO' : 'COMPRA_CREDITO',
+                        'compra_id'            => $compra->id,
                         'motivo'               => "Compra {$numero}",
                         'referencia_tipo'      => 'COMPRA',
                         'referencia_id'        => $compra->id,
@@ -219,6 +221,8 @@ class CompraRepository
                             'item_id'              => $item->id,
                             'usuario_id'           => $usuarioId,
                             'tipo'                 => 'SALIDA',
+                            'subtipo'              => 'ANULACION_COMPRA',
+                            'compra_id'            => $compra->id,
                             'motivo'               => "Anulación compra {$compra->numero}",
                             'referencia_tipo'      => 'COMPRA',
                             'referencia_id'        => $compra->id,
@@ -239,8 +243,87 @@ class CompraRepository
                 $egreso->update(['estado' => 'ANULADO']);
             }
 
-            $compra->update(['estado' => 'ANULADA']);
-            return $compra->fresh();
+            $compra->update(['estado' => 'ANULADA', 'anulado_por_id' => $usuarioId]);
+            return $compra->fresh(['proveedor', 'usuario', 'anuladoPor']);
+        });
+    }
+
+    public function ajustarCompraItem(int $compraId, int $itemId, int $nuevaCantidad, float $nuevoPrecioUnitario, ?string $motivo, int $usuarioId): array
+    {
+        return DB::transaction(function () use ($compraId, $itemId, $nuevaCantidad, $nuevoPrecioUnitario, $motivo, $usuarioId) {
+            $compra = Compra::with('items.item')->lockForUpdate()->findOrFail($compraId);
+
+            $compraItem = $compra->items->firstWhere('item_id', $itemId);
+            if (! $compraItem) {
+                throw new \RuntimeException("El ítem #{$itemId} no pertenece a la compra #{$compraId}.");
+            }
+
+            $item             = $compraItem->item;
+            $cantidadAnterior = (int) $compraItem->cantidad;
+            $delta            = $nuevaCantidad - $cantidadAnterior;
+
+            // Update compra_item
+            $nuevoSubtotalItem = round($nuevaCantidad * $nuevoPrecioUnitario, 2);
+            $compraItem->update([
+                'cantidad'        => $nuevaCantidad,
+                'precio_unitario' => $nuevoPrecioUnitario,
+                'subtotal'        => $nuevoSubtotalItem,
+            ]);
+
+            // Recalculate compra totals from DB to handle multi-item compras
+            $nuevoSubtotalCompra = CompraItem::where('compra_id', $compraId)->sum('subtotal');
+            $nuevoTotal          = round((float) $nuevoSubtotalCompra + (float) $compra->impuestos, 2);
+            $totalDelta          = $nuevoTotal - (float) $compra->total;
+
+            $compraUpdates = [
+                'subtotal' => round($nuevoSubtotalCompra, 2),
+                'total'    => $nuevoTotal,
+            ];
+
+            if ($compra->condicion_pago === 'CREDITO') {
+                $nuevoSaldo = max(0, round((float) $compra->saldo_pendiente + $totalDelta, 2));
+                $compraUpdates['saldo_pendiente'] = $nuevoSaldo;
+                if ($nuevoSaldo <= 0 && $compra->estado !== 'ANULADA') {
+                    $compraUpdates['estado'] = 'PAGADA';
+                }
+            }
+
+            $compra->update($compraUpdates);
+
+            // Update inventory
+            $nuevasUnidades = null;
+            if ($item && $item->controla_inventario && $delta !== 0) {
+                $inventario = Inventario::where('empresa_id', $compra->empresa_id)
+                    ->where('item_id', $itemId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($inventario) {
+                    $nuevasUnidades = max(0, (int) $inventario->unidades_actuales + $delta);
+                    $inventario->update(['unidades_actuales' => $nuevasUnidades]);
+
+                    InventarioMovimiento::create([
+                        'empresa_id'           => $compra->empresa_id,
+                        'item_id'              => $itemId,
+                        'usuario_id'           => $usuarioId,
+                        'tipo'                 => $delta > 0 ? 'ENTRADA' : 'SALIDA',
+                        'subtipo'              => $delta > 0 ? 'AJUSTE_COMPRA_AUMENTO' : 'AJUSTE_COMPRA_REDUCCION',
+                        'compra_id'            => $compraId,
+                        'motivo'               => $motivo ?? "Ajuste compra {$compra->numero}",
+                        'referencia_tipo'      => 'COMPRA',
+                        'referencia_id'        => $compraId,
+                        'unidades'             => abs($delta),
+                        'unidades_resultantes' => $nuevasUnidades,
+                        'ocurrido_en'          => now(),
+                    ]);
+                }
+            }
+
+            return [
+                'compra'      => $compra->fresh(['items.item', 'proveedor', 'egresos']),
+                'delta'       => $delta,
+                'stock_nuevo' => $nuevasUnidades,
+            ];
         });
     }
 
