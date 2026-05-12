@@ -200,50 +200,113 @@ class CompraRepository
                 ->lockForUpdate()
                 ->findOrFail($id);
 
-            // Solo revertir inventario si la compra fue confirmada (tiene numero).
-            // Una compra sin numero nunca tuvo inventario agregado.
+            // ── Paso 1: calcular cuántas unidades pueden anularse ─────────────
+            $totalCompra   = 0;
+            $totalAnulable = 0;
+            $itemsAnulacion = [];
+
             if ($compra->numero !== null) {
                 foreach ($compra->items as $compraItem) {
-                    $item = $compraItem->item;
-                    if (! $item || ! $item->controla_inventario) continue;
+                    $item         = $compraItem->item;
+                    $cantCompra   = (int) $compraItem->cantidad;
+                    $cantAnulable = $cantCompra; // Default para ítems sin inventario
 
-                    $inventario = Inventario::where('empresa_id', $empresaId)
-                        ->where('item_id', $item->id)
-                        ->lockForUpdate()
-                        ->first();
+                    if ($item && $item->controla_inventario) {
+                        $inventario = Inventario::where('empresa_id', $empresaId)
+                            ->where('item_id', $item->id)
+                            ->lockForUpdate()
+                            ->first();
 
-                    if ($inventario) {
-                        $nuevasUnidades = max(0, $inventario->unidades_actuales - $compraItem->cantidad);
-                        $inventario->update(['unidades_actuales' => $nuevasUnidades]);
+                        $cantAnulable = $inventario
+                            ? min($cantCompra, max(0, (int) $inventario->unidades_actuales))
+                            : 0;
 
-                        InventarioMovimiento::create([
-                            'empresa_id'           => $empresaId,
-                            'item_id'              => $item->id,
-                            'usuario_id'           => $usuarioId,
-                            'tipo'                 => 'SALIDA',
-                            'subtipo'              => 'ANULACION_COMPRA',
-                            'compra_id'            => $compra->id,
-                            'motivo'               => "Anulación compra {$compra->numero}",
-                            'referencia_tipo'      => 'COMPRA',
-                            'referencia_id'        => $compra->id,
-                            'unidades'             => $compraItem->cantidad,
-                            'unidades_resultantes' => $nuevasUnidades,
-                            'ocurrido_en'          => now(),
+                        $itemsAnulacion[] = [
+                            'compraItem'    => $compraItem,
+                            'item'          => $item,
+                            'inventario'    => $inventario,
+                            'cant_compra'   => $cantCompra,
+                            'cant_anulable' => $cantAnulable,
+                        ];
+                    }
+
+                    $totalCompra   += $cantCompra;
+                    $totalAnulable += $cantAnulable;
+                }
+
+                // Bloquear si ninguna unidad puede anularse
+                $hayInventario = count($itemsAnulacion) > 0;
+                if ($hayInventario && $totalAnulable === 0) {
+                    throw new \RuntimeException(
+                        'No hay unidades disponibles para anular. ' .
+                        'Todas las unidades de esta compra ya fueron consumidas o vendidas.'
+                    );
+                }
+
+                // ── Paso 2: revertir inventario ───────────────────────────────
+                $fraccion = $totalCompra > 0 ? ($totalAnulable / $totalCompra) : 1.0;
+                $esFull   = abs($fraccion - 1.0) < 0.001;
+                $subtipo  = $esFull ? 'ANULACION_COMPRA' : 'AJUSTE_ANULACION_PARCIAL';
+
+                foreach ($itemsAnulacion as $d) {
+                    if ($d['cant_anulable'] <= 0 || ! $d['inventario']) continue;
+
+                    $nuevasUnidades = max(0, (int) $d['inventario']->unidades_actuales - $d['cant_anulable']);
+                    $d['inventario']->update(['unidades_actuales' => $nuevasUnidades]);
+
+                    InventarioMovimiento::create([
+                        'empresa_id'           => $empresaId,
+                        'item_id'              => $d['item']->id,
+                        'usuario_id'           => $usuarioId,
+                        'tipo'                 => 'SALIDA',
+                        'subtipo'              => $subtipo,
+                        'compra_id'            => $compra->id,
+                        'motivo'               => "Anulación compra {$compra->numero}",
+                        'referencia_tipo'      => 'COMPRA',
+                        'referencia_id'        => $compra->id,
+                        'unidades'             => $d['cant_anulable'],
+                        'unidades_resultantes' => $nuevasUnidades,
+                        'ocurrido_en'          => now(),
+                    ]);
+                }
+
+                // ── Paso 3: reversión financiera ──────────────────────────────
+                $egresosActivos = $compra->egresos()->where('estado', 'ACTIVO')->get();
+                $totalAbonado   = (float) $egresosActivos->sum('monto');
+
+                if ($esFull) {
+                    // Anulación total: marcar egresos ANULADO (reduce egresos_compras automáticamente)
+                    // Los registros en caja_movimientos se conservan como historial
+                    foreach ($egresosActivos as $egreso) {
+                        $egreso->update(['estado' => 'ANULADO']);
+                    }
+                } else {
+                    // Anulación parcial: los egresos quedan ACTIVO (son hechos históricos)
+                    // Se crea un IngresoManual proporcional al reembolso
+                    $montoDevolucion = round($fraccion * $totalAbonado, 2);
+
+                    if ($montoDevolucion > 0) {
+                        \App\Models\IngresoManual::create([
+                            'empresa_id'  => $empresaId,
+                            'usuario_id'  => $usuarioId,
+                            'fecha'       => now()->toDateString(),
+                            'descripcion' => "Reembolso parcial compra {$compra->numero} ({$totalAnulable}/{$totalCompra} uds.)",
+                            'monto'       => $montoDevolucion,
+                            'notas'       => "Generado automáticamente por anulación parcial de compra #{$compra->id}.",
+                            'estado'      => 'ACTIVO',
                         ]);
                     }
                 }
             }
 
-            foreach ($compra->egresos()->where('estado', 'ACTIVO')->get() as $egreso) {
-                CajaMovimiento::where('origen_tipo', 'EGRESO_COMPRA')
-                    ->where('origen_id', $egreso->id)
-                    ->where('empresa_id', $empresaId)
-                    ->delete();
-
-                $egreso->update(['estado' => 'ANULADO']);
+            // ── Paso 4: cancelar deuda pendiente (CRÉDITO) ───────────────────
+            if ($compra->condicion_pago === 'CREDITO' && (float) $compra->saldo_pendiente > 0) {
+                $compra->update(['saldo_pendiente' => 0]);
             }
 
+            // ── Paso 5: marcar compra como ANULADA ────────────────────────────
             $compra->update(['estado' => 'ANULADA', 'anulado_por_id' => $usuarioId]);
+
             return $compra->fresh(['proveedor', 'usuario', 'anuladoPor']);
         });
     }

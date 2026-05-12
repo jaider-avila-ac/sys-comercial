@@ -96,44 +96,22 @@ class ItemService
     {
         $item = $this->obtener($id, $empresaId);
 
-        // Bloquear si está en facturas activas (no anuladas)
-        $enFacturasActivas = $item->facturaLineas()
-            ->whereHas('factura', fn ($q) => $q->where('estado', '!=', 'ANULADA'))
-            ->exists();
+        // Si el ítem tiene CUALQUIER historial, solo se desactiva — nunca se elimina físicamente
+        $tieneHistorial =
+            DB::table('compra_items')->where('item_id', $id)->exists()
+            || DB::table('inventario_movimientos')->where('item_id', $id)->exists()
+            || DB::table('factura_lineas')->where('item_id', $id)->exists();
 
-        if ($enFacturasActivas) {
-            throw new HttpException(
-                422,
-                'Este ítem se ha utilizado en facturas activas y no puede eliminarse. Solo puede desactivarse.'
-            );
+        if ($tieneHistorial) {
+            $this->itemRepository->update($id, ['is_activo' => false]);
+            return;
         }
 
-        DB::transaction(function () use ($id, $empresaId, $usuarioId, $item) {
-            // Anular todas las compras no anuladas que referencian este ítem
-            $compraIds = DB::table('compra_items')
-                ->where('item_id', $id)
-                ->pluck('compra_id')
-                ->unique();
-
-            foreach ($compraIds as $compraId) {
-                try {
-                    $compra = $this->compraService->obtener($compraId, $empresaId);
-                    if ($compra->estado !== 'ANULADA') {
-                        $this->compraService->anular($compraId, $empresaId, $usuarioId);
-                    }
-                } catch (\Throwable) {
-                    // Compra de otra empresa o no encontrada — se omite
-                }
-            }
-
-            // Eliminar referencias FK antes de borrar el ítem
-            DB::table('compra_items')->where('item_id', $id)->delete();
-            DB::table('inventario_movimientos')->where('item_id', $id)->delete();
-
+        // Ítem sin historial: eliminación física segura
+        DB::transaction(function () use ($item, $id) {
             if ($item->inventario) {
                 $item->inventario->delete();
             }
-
             $this->itemRepository->delete($id);
         });
     }

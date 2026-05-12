@@ -104,11 +104,9 @@ class EgresoCompraRepository
                 }
             }
 
-            CajaMovimiento::where('origen_tipo', 'EGRESO_COMPRA')
-                ->where('origen_id', $id)
-                ->where('empresa_id', $empresaId)
-                ->delete();
-
+            // El registro en caja_movimientos se conserva como historial de auditoría.
+            // Al marcar el egreso ANULADO, ResumenService lo excluye automáticamente
+            // del cálculo de egresos_compras, revirtiendo el impacto financiero.
             $egreso->update(['estado' => 'ANULADO', 'anulado_por_id' => request()->user()?->id]);
             return $egreso->fresh(['usuario', 'anuladoPor']);
         });
